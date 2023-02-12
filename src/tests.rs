@@ -23,7 +23,7 @@ mod tests {
     use cosmwasm_std::{
         from_binary,
         testing::{mock_env, mock_info},
-        Addr, StdError, Uint128,
+        Addr, DepsMut, StdError, Uint128,
     };
     use cw_controllers::AdminResponse;
     use oraiswap::asset::{Asset, AssetInfo};
@@ -46,6 +46,15 @@ mod tests {
         let response: AdminResponse =
             from_binary(&query(deps.as_ref(), mock_env(), query_admin_msg).unwrap()).unwrap();
         assert_eq!(response.admin, Some(String::from("admin")));
+    }
+
+    fn test_unauthorized_admin(deps: DepsMut, msg: ExecuteMsg) {
+        let acc = mock_info(&String::from("unauthorized"), &[]);
+        let response = execute(deps, mock_env(), acc, msg).unwrap_err();
+        assert_eq!(
+            response.to_string(),
+            ContractError::InvalidAdmin {}.to_string()
+        );
     }
 
     #[test]
@@ -94,6 +103,9 @@ mod tests {
             upper_bound,
             label: Some("demo_balance".to_string()),
         });
+
+        test_unauthorized_admin(deps.as_mut(), execute_msg.clone());
+
         let admin = mock_info(&String::from("admin"), &[]);
         let response = execute(deps.as_mut(), mock_env(), admin, execute_msg).unwrap_err();
         assert_eq!(
@@ -120,6 +132,9 @@ mod tests {
             upper_bound,
             label: Some("demo_balance".to_string()),
         });
+
+        test_unauthorized_admin(deps.as_mut(), execute_msg.clone());
+
         let admin = mock_info(&String::from("admin"), &[]);
         let response = execute(deps.as_mut(), mock_env(), admin, execute_msg).unwrap_err();
         assert_eq!(
@@ -141,6 +156,9 @@ mod tests {
             asset_info,
             balance_info,
         });
+
+        test_unauthorized_admin(deps.as_mut(), execute_msg.clone());
+
         let admin = mock_info(&String::from("admin"), &[]);
         let response = execute(deps.as_mut(), mock_env(), admin, execute_msg).unwrap_err();
         assert_eq!(
@@ -156,6 +174,7 @@ mod tests {
             denom: String::from("orai"),
         };
         let execute_msg = ExecuteMsg::DeleteBalanceMapping(DeleteBalanceMappingMsg { asset_info });
+        test_unauthorized_admin(deps.as_mut(), execute_msg.clone());
         let admin = mock_info(&String::from("admin"), &[]);
         let response = execute(deps.as_mut(), mock_env(), admin, execute_msg).unwrap_err();
         assert_eq!(

@@ -58,6 +58,9 @@ pub fn add_balance(
     info: MessageInfo,
     msg: AddNewBalanceMsg,
 ) -> Result<Response, ContractError> {
+    ADMIN
+        .assert_admin(deps.as_ref(), &info.sender)
+        .map_err(|_| ContractError::InvalidAdmin {})?;
     Err(ContractError::Std(StdError::generic_err("unimplemented")))
 }
 
@@ -66,6 +69,9 @@ pub fn update_balance(
     info: MessageInfo,
     msg: UpdateBalanceMsg,
 ) -> Result<Response, ContractError> {
+    ADMIN
+        .assert_admin(deps.as_ref(), &info.sender)
+        .map_err(|_| ContractError::InvalidAdmin {})?;
     Err(ContractError::Std(StdError::generic_err("unimplemented")))
 }
 
@@ -74,6 +80,9 @@ pub fn delete_balance(
     info: MessageInfo,
     msg: DeleteBalanceMsg,
 ) -> Result<Response, ContractError> {
+    ADMIN
+        .assert_admin(deps.as_ref(), &info.sender)
+        .map_err(|_| ContractError::InvalidAdmin {})?;
     Err(ContractError::Std(StdError::generic_err("unimplemented")))
 }
 
@@ -82,6 +91,9 @@ pub fn update_balance_mapping(
     info: MessageInfo,
     msg: DeleteBalanceMappingMsg,
 ) -> Result<Response, ContractError> {
+    ADMIN
+        .assert_admin(deps.as_ref(), &info.sender)
+        .map_err(|_| ContractError::InvalidAdmin {})?;
     Err(ContractError::Std(StdError::generic_err("unimplemented")))
 }
 
