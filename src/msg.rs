@@ -26,7 +26,7 @@ pub enum ExecuteMsg {
 
 #[cw_serde]
 pub struct AddNewBalanceMsg {
-    pub asset_info: AssetInfo,
+    pub addr: String,
     pub balance_info: AssetInfo,
     pub lower_bound: Uint128,
     pub upper_bound: Uint128,
@@ -35,7 +35,7 @@ pub struct AddNewBalanceMsg {
 
 #[cw_serde]
 pub struct UpdateBalanceMsg {
-    pub asset_info: AssetInfo,
+    pub addr: String,
     pub balance_info: AssetInfo,
     pub lower_bound: Uint128,
     pub upper_bound: Uint128,
@@ -44,13 +44,13 @@ pub struct UpdateBalanceMsg {
 
 #[cw_serde]
 pub struct DeleteBalanceMsg {
-    pub asset_info: AssetInfo,
+    pub addr: String,
     pub balance_info: AssetInfo,
 }
 
 #[cw_serde]
 pub struct DeleteBalanceMappingMsg {
-    pub asset_info: AssetInfo,
+    pub addr: String,
 }
 
 #[cw_serde]

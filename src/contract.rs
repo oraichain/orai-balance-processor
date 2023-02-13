@@ -12,7 +12,7 @@ use crate::msg::{
     DeleteBalanceMsg, ExecuteMsg, InstantiateMsg, QueryBalanceMappingResponse,
     QueryBalancesMappingResponse, QueryLowBalancesResponse, QueryMsg, TopupMsg, UpdateBalanceMsg,
 };
-use crate::state::{ADMIN, BALANCE_INFOS};
+use crate::state::{AssetData, BalanceInfo, ADMIN, BALANCE_INFOS};
 
 /*
 // version info for migration info
@@ -61,7 +61,52 @@ pub fn add_balance(
     ADMIN
         .assert_admin(deps.as_ref(), &info.sender)
         .map_err(|_| ContractError::InvalidAdmin {})?;
-    Err(ContractError::Std(StdError::generic_err("unimplemented")))
+    let addr = deps.api.addr_validate(&msg.addr)?;
+
+    // if already exist we append new balance into the list
+    BALANCE_INFOS.update(
+        deps.storage,
+        addr,
+        |balance_info| -> StdResult<BalanceInfo> {
+            // if exist then we append the new balance into the list, else we create new
+            if let Some(mut balance_info) = balance_info {
+                // we dont allow repetitive balance info in the list to prevent spamming
+                if balance_info
+                    .balances
+                    .clone()
+                    .into_iter()
+                    .find(|asset_data| asset_data.asset.eq(&msg.balance_info))
+                    .is_some()
+                {
+                    return Err(StdError::generic_err(
+                        ContractError::BalanceInfoExists {}.to_string(),
+                    ));
+                }
+                balance_info.balances.push(AssetData {
+                    asset: msg.balance_info.clone(),
+                    lower_bound: msg.lower_bound,
+                    upper_bound: msg.upper_bound,
+                });
+                return Ok(balance_info);
+            }
+            Ok(BalanceInfo {
+                label: msg.label.unwrap_or_default(),
+                balances: vec![AssetData {
+                    asset: msg.balance_info.clone(),
+                    lower_bound: msg.lower_bound,
+                    upper_bound: msg.upper_bound,
+                }],
+            })
+        },
+    )?;
+    // send response
+    let res = Response::new()
+        .add_attribute("action", "add_balance")
+        .add_attribute("addr", msg.addr)
+        .add_attribute("balance_info", msg.balance_info.to_string())
+        .add_attribute("lower_bound", msg.lower_bound)
+        .add_attribute("upper_bound", msg.upper_bound);
+    Ok(res)
 }
 
 pub fn update_balance(
