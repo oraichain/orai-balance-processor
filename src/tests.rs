@@ -92,12 +92,8 @@ mod tests {
         testing::{mock_env, mock_info},
         Addr, DepsMut, StdError, Uint128,
     };
-    use cw20::Cw20ExecuteMsg;
     use cw_controllers::AdminResponse;
-    use oraiswap::{
-        asset::{Asset, AssetInfo},
-        cw_multi_test::Executor,
-    };
+    use oraiswap::asset::{Asset, AssetInfo};
 
     use crate::{
         contract::{execute, query},
@@ -140,11 +136,60 @@ mod tests {
     #[test]
     fn test_query_balance_mapping() {
         let mut deps = setup();
-        let query_msg = QueryMsg::QueryBalanceMapping {
-            addr: "foobar".to_string(),
+        let addr = "addr".to_string();
+        let query_msg = QueryMsg::QueryBalanceMapping { addr: addr.clone() };
+
+        // should be empty at first
+        let response = &query(deps.as_ref(), mock_env(), query_msg.clone()).unwrap_err();
+        assert_eq!(
+            response.to_string(),
+            StdError::NotFound {
+                kind: "oraiswap_balance_processor::state::BalanceInfo".to_string()
+            }
+            .to_string()
+        );
+
+        // when adding a new balance info, should query new data
+        let balance_info = AssetInfo::Token {
+            contract_addr: Addr::unchecked("contract"),
         };
-        let response = query(deps.as_ref(), mock_env(), query_msg).unwrap_err();
-        assert_eq!(response, StdError::generic_err("unimplemented"));
+        let lower_bound = Uint128::from(50000u128);
+        let upper_bound = Uint128::from(100000u128);
+        let add_new_balance_msg = AddNewBalanceMsg {
+            addr: addr.clone(),
+            balance_info: balance_info.clone(),
+            lower_bound,
+            upper_bound,
+            label: Some("demo_balance".to_string()),
+        };
+        let execute_msg = ExecuteMsg::AddBalance(add_new_balance_msg.clone());
+
+        test_unauthorized_admin(deps.as_mut(), execute_msg.clone());
+
+        let admin = mock_info(&String::from("admin"), &[]);
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            admin.clone(),
+            execute_msg.clone(),
+        )
+        .unwrap();
+
+        // when querying it should show two balances info
+        // query to double check if add balance is there
+        let response: QueryBalanceMappingResponse = from_binary(
+            &query(
+                deps.as_ref(),
+                mock_env(),
+                QueryMsg::QueryBalanceMapping { addr: addr.clone() },
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            response.assets.last().unwrap().asset.to_string(),
+            balance_info.to_string()
+        );
     }
 
     #[test]
