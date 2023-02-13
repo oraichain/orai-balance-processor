@@ -4,13 +4,13 @@ use crate::msg::InstantiateMsg;
 use cosmwasm_std::testing::{
     mock_dependencies, mock_env, mock_info, MockApi, MockQuerier, MockStorage,
 };
-use cosmwasm_std::{Addr, Empty, MessageInfo, OwnedDeps};
+use cosmwasm_std::{coins, Addr, BankMsg, Empty, MessageInfo, OwnedDeps};
 use cw20::MinterResponse;
 use cw20_base::contract::{
     execute as execute_cw20, instantiate as instantiate_cw20, query as query_cw20,
 };
 use cw20_base::msg::InstantiateMsg as Cw20InstantiateMsg;
-use oraiswap::cw_multi_test::{App, Contract, ContractWrapper, Executor};
+use oraiswap::cw_multi_test::{App, BankSudo, Contract, ContractWrapper, Executor, SudoMsg};
 
 pub fn setup() -> OwnedDeps<MockStorage, MockApi, MockQuerier> {
     let mut deps = mock_dependencies();
@@ -45,14 +45,22 @@ fn init_multitest() -> (App, Addr, Addr, MessageInfo) {
 
     // init processor contract
     let contract_code_id = router.store_code(contract_balance_processor());
-    let admin = mock_info(&String::from("admin"), &[]);
+    let admin = mock_info(&String::from("admin"), &coins(1000000u128, "orai"));
+
+    // mint admin wallet orai so it can distribute to other wallets in test cases
+    router
+        .sudo(SudoMsg::Bank(BankSudo::Mint {
+            to_address: admin.sender.clone().to_string(),
+            amount: admin.clone().funds,
+        }))
+        .unwrap();
 
     let contract = router
         .instantiate_contract(
             contract_code_id,
             admin.sender.clone(),
             &InstantiateMsg {},
-            &[],
+            &admin.funds,
             "processor",
             None,
         )
@@ -88,19 +96,23 @@ fn init_multitest() -> (App, Addr, Addr, MessageInfo) {
 #[cfg(test)]
 mod tests {
     use cosmwasm_std::{
-        from_binary,
+        coins, from_binary,
         testing::{mock_env, mock_info},
-        Addr, DepsMut, StdError, Uint128,
+        to_binary, Addr, BankMsg, CosmosMsg, DepsMut, StdError, StdResult, Uint128, WasmMsg,
     };
+    use cw20::Cw20ExecuteMsg;
     use cw_controllers::AdminResponse;
-    use oraiswap::asset::{Asset, AssetInfo};
+    use oraiswap::{
+        asset::{Asset, AssetInfo},
+        cw_multi_test::Executor,
+    };
 
     use crate::{
         contract::{execute, query},
         msg::{
             AddNewBalanceMsg, DeleteBalanceMappingMsg, DeleteBalanceMsg, ExecuteMsg,
-            QueryBalanceMappingResponse, QueryBalancesMappingResponse, QueryMsg, TopupMsg,
-            UpdateBalanceMsg,
+            QueryBalanceMappingResponse, QueryBalancesMappingResponse, QueryLowBalancesResponse,
+            QueryMsg, TopupMsg, UpdateBalanceMsg,
         },
         tests::init_multitest,
         ContractError,
@@ -245,10 +257,103 @@ mod tests {
 
     #[test]
     fn test_query_low_balances() {
-        let mut deps = setup();
-        let query_msg = QueryMsg::QueryLowBalances {};
-        let response = query(deps.as_ref(), mock_env(), query_msg).unwrap_err();
-        assert_eq!(response, StdError::generic_err("unimplemented"));
+        let (mut deps, addr, cw20_addr, admin) = init_multitest();
+        let mock_addr = mock_info("sender", &vec![]);
+        let native_balance_info_denom = "orai".to_string();
+        let cw20_balance_info_address = cw20_addr.to_string();
+        let admin_addr = admin.sender;
+        // init msgs to send the admin addr some cw20 & native tokens
+        deps.execute(
+            addr.clone(),
+            BankMsg::Send {
+                to_address: mock_addr.sender.clone().into_string(),
+                amount: coins(10u128, native_balance_info_denom.clone()),
+            }
+            .into(),
+        )
+        .unwrap();
+
+        deps.execute_contract(
+            admin_addr.clone(),
+            cw20_addr.clone(),
+            &Cw20ExecuteMsg::Mint {
+                recipient: mock_addr.sender.clone().to_string(),
+                amount: Uint128::from(100u128),
+            },
+            &vec![],
+        )
+        .unwrap();
+
+        // store two balance infos above into the balance mapping to try querying low balances
+        // store native balance info orai
+        deps.execute_contract(
+            admin_addr.clone(),
+            addr.clone(),
+            &ExecuteMsg::AddBalance(AddNewBalanceMsg {
+                addr: mock_addr.sender.clone().to_string(),
+                balance_info: AssetInfo::NativeToken {
+                    denom: native_balance_info_denom.clone(),
+                },
+                lower_bound: Uint128::from(11u128), // current balance is 10u128, should trigger low balance
+                upper_bound: Uint128::from(100u128),
+                label: Some("demo_balance".to_string()),
+            }),
+            &vec![],
+        )
+        .unwrap();
+
+        // store cw20 balance
+        deps.execute_contract(
+            admin_addr.clone(),
+            addr.clone(),
+            &ExecuteMsg::AddBalance(AddNewBalanceMsg {
+                addr: mock_addr.sender.clone().to_string(),
+                balance_info: AssetInfo::Token {
+                    contract_addr: Addr::unchecked(&cw20_balance_info_address.clone()),
+                },
+                lower_bound: Uint128::from(11u128), // current balance is 10u128, should trigger low balance
+                upper_bound: Uint128::from(1000u128),
+                label: Some("demo_balance".to_string()),
+            }),
+            &vec![],
+        )
+        .unwrap();
+
+        // query low balance, should return only native balance because it is lower than lower bound
+        let response: QueryLowBalancesResponse = deps
+            .wrap()
+            .query_wasm_smart(addr.clone().into_string(), &QueryMsg::QueryLowBalances {})
+            .unwrap();
+        assert_eq!(
+            response
+                .low_balance_assets
+                .last()
+                .unwrap()
+                .assets
+                .last()
+                .unwrap()
+                .info,
+            AssetInfo::NativeToken {
+                denom: native_balance_info_denom.clone()
+            }
+        );
+
+        // if now we top up mock addr with native address, the list should be empty because lower bound of native is 11u128
+        deps.execute(
+            addr.clone(),
+            BankMsg::Send {
+                to_address: mock_addr.sender.clone().to_string(),
+                amount: coins(100u128, native_balance_info_denom.clone()),
+            }
+            .into(),
+        )
+        .unwrap();
+
+        let response: QueryLowBalancesResponse = deps
+            .wrap()
+            .query_wasm_smart(addr.clone().into_string(), &QueryMsg::QueryLowBalances {})
+            .unwrap();
+        assert_eq!(response.low_balance_assets.len(), 0usize);
     }
 
     #[test]

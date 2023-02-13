@@ -218,5 +218,5 @@ pub fn query_low_balances(deps: Deps) -> StdResult<QueryLowBalancesResponse> {
             low_balance_assets.push(balance_query);
         }
     }
-    Err(StdError::generic_err("unimplemented"))
+    Ok(QueryLowBalancesResponse { low_balance_assets })
 }
