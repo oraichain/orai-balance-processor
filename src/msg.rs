@@ -1,5 +1,5 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::Uint128;
+use cosmwasm_std::{Addr, Uint128};
 use cw_controllers::AdminResponse;
 use oraiswap::asset::{Asset, AssetInfo};
 
@@ -69,7 +69,7 @@ pub enum QueryMsg {
     QueryBalancesMapping {},
     /// Query a balance mapping given an asset info
     #[returns(QueryBalanceMappingResponse)]
-    QueryBalanceMapping { asset_info: AssetInfo },
+    QueryBalanceMapping { addr: String },
     #[returns(AdminResponse)]
     QueryAdmin {},
 }
@@ -81,12 +81,12 @@ pub struct QueryLowBalancesResponse {
 
 #[cw_serde]
 pub struct QueryBalancesReponse {
-    pub balance_assets: Vec<BalancesQuery>,
+    pub balance_assets: Vec<BalancesMappingQuery>,
 }
 
 #[cw_serde]
 pub struct QueryBalancesMappingResponse {
-    pub balance_assets: Vec<BalancesQuery>,
+    pub balance_assets: Vec<BalancesMappingQuery>,
 }
 
 #[cw_serde]
@@ -96,8 +96,15 @@ pub struct QueryBalanceMappingResponse {
 }
 
 #[cw_serde]
-pub struct BalancesQuery {
-    pub asset_info: AssetInfo,
+pub struct BalancesMappingQuery {
+    pub addr: Addr,
     pub label: String,
     pub assets: Vec<AssetData>,
+}
+
+#[cw_serde]
+pub struct BalancesQuery {
+    pub addr: Addr,
+    pub label: String,
+    pub assets: Vec<Asset>,
 }

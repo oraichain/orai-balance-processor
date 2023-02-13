@@ -2,7 +2,7 @@ use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Addr, Uint128};
 use cw_controllers::Admin;
 use cw_storage_plus::Map;
-use oraiswap::asset::Asset;
+use oraiswap::asset::AssetInfo;
 
 #[cw_serde]
 pub struct BalanceInfo {
@@ -12,7 +12,7 @@ pub struct BalanceInfo {
 
 #[cw_serde]
 pub struct AssetData {
-    pub asset: Asset,
+    pub asset: AssetInfo,
     // lower balance threshold. Should top-up if actual balance lower.
     pub lower_bound: Uint128,
     // upper balance threshold. Will only top-up to this value.

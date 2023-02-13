@@ -69,9 +69,7 @@ mod tests {
     fn test_query_balance_mapping() {
         let mut deps = setup();
         let query_msg = QueryMsg::QueryBalanceMapping {
-            asset_info: AssetInfo::NativeToken {
-                denom: String::from("foobar"),
-            },
+            addr: "foobar".to_string(),
         };
         let response = query(deps.as_ref(), mock_env(), query_msg).unwrap_err();
         assert_eq!(response, StdError::generic_err("unimplemented"));

@@ -1,18 +1,18 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    to_binary, Addr, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdError, StdResult,
+    to_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdError, StdResult,
 };
-use oraiswap::asset::AssetInfo;
 // use cw2::set_contract_version;
 
 use crate::error::ContractError;
+use crate::helpers::query_balance;
 use crate::msg::{
-    AddNewBalanceMsg, DeleteBalanceMappingMsg, DeleteBalanceMsg, ExecuteMsg, InstantiateMsg,
-    QueryBalanceMappingResponse, QueryBalancesMappingResponse, QueryLowBalancesResponse, QueryMsg,
-    TopupMsg, UpdateBalanceMsg,
+    AddNewBalanceMsg, BalancesMappingQuery, BalancesQuery, DeleteBalanceMappingMsg,
+    DeleteBalanceMsg, ExecuteMsg, InstantiateMsg, QueryBalanceMappingResponse,
+    QueryBalancesMappingResponse, QueryLowBalancesResponse, QueryMsg, TopupMsg, UpdateBalanceMsg,
 };
-use crate::state::ADMIN;
+use crate::state::{ADMIN, BALANCE_INFOS};
 
 /*
 // version info for migration info
@@ -105,25 +105,73 @@ pub fn topup(deps: DepsMut, info: MessageInfo, msg: TopupMsg) -> Result<Response
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::QueryAdmin {} => to_binary(&ADMIN.query_admin(deps)?),
-        QueryMsg::QueryBalanceMapping { asset_info } => {
-            to_binary(&query_balance_mapping(deps, asset_info)?)
-        }
+        QueryMsg::QueryBalanceMapping { addr } => to_binary(&query_balance_mapping(deps, addr)?),
         QueryMsg::QueryBalancesMapping {} => to_binary(&query_balances_mapping(deps)?),
         QueryMsg::QueryLowBalances {} => to_binary(&query_low_balances(deps)?),
     }
 }
 
-pub fn query_balance_mapping(
-    deps: Deps,
-    asset_info: AssetInfo,
-) -> StdResult<QueryBalanceMappingResponse> {
-    Err(StdError::generic_err("unimplemented"))
+pub fn query_balance_mapping(deps: Deps, addr: String) -> StdResult<QueryBalanceMappingResponse> {
+    let balance_query = BALANCE_INFOS.load(deps.storage, deps.api.addr_validate(&addr)?)?;
+    Ok(QueryBalanceMappingResponse {
+        label: balance_query.label,
+        assets: balance_query.balances,
+    })
 }
 
 pub fn query_balances_mapping(deps: Deps) -> StdResult<QueryBalancesMappingResponse> {
-    Err(StdError::generic_err("unimplemented"))
+    let infos: Vec<BalancesMappingQuery> = BALANCE_INFOS
+        .range(deps.storage, None, None, cosmwasm_std::Order::Ascending)
+        .map(|item| {
+            item.and_then(|(k, v)| {
+                Ok(BalancesMappingQuery {
+                    addr: k,
+                    label: v.label,
+                    assets: v.balances,
+                })
+            })
+        })
+        .collect::<StdResult<_>>()?;
+    Ok(QueryBalancesMappingResponse {
+        balance_assets: infos,
+    })
 }
 
 pub fn query_low_balances(deps: Deps) -> StdResult<QueryLowBalancesResponse> {
+    let infos: Vec<BalancesMappingQuery> = BALANCE_INFOS
+        .range(deps.storage, None, None, cosmwasm_std::Order::Ascending)
+        .map(|item| {
+            item.and_then(|(k, v)| {
+                Ok(BalancesMappingQuery {
+                    addr: k,
+                    label: v.label,
+                    assets: v.balances,
+                })
+            })
+        })
+        .collect::<StdResult<_>>()?;
+
+    let mut low_balance_assets: Vec<BalancesQuery> = vec![];
+
+    for element in infos {
+        let mut balance_query = BalancesQuery {
+            addr: element.addr.clone(),
+            label: element.label,
+            assets: vec![],
+        };
+        for inner_element in element.assets {
+            let result = query_balance(deps, element.addr.to_string(), inner_element.asset)?;
+
+            // only save into the list of balance query if balance amount is below the lower bound
+            if result.amount.le(&inner_element.lower_bound) {
+                balance_query.assets.push(result);
+            }
+        }
+
+        // only append balance query into the list if we find an asset that has low balance
+        if !balance_query.assets.is_empty() {
+            low_balance_assets.push(balance_query);
+        }
+    }
     Err(StdError::generic_err("unimplemented"))
 }
