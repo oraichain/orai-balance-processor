@@ -99,7 +99,8 @@ mod tests {
         contract::{execute, query},
         msg::{
             AddNewBalanceMsg, DeleteBalanceMappingMsg, DeleteBalanceMsg, ExecuteMsg,
-            QueryBalanceMappingResponse, QueryMsg, TopupMsg, UpdateBalanceMsg,
+            QueryBalanceMappingResponse, QueryBalancesMappingResponse, QueryMsg, TopupMsg,
+            UpdateBalanceMsg,
         },
         tests::init_multitest,
         ContractError,
@@ -128,9 +129,61 @@ mod tests {
     #[test]
     fn test_query_balances_mapping() {
         let mut deps = setup();
+        let addr = "addr".to_string();
+        let second_addr = "second_addr".to_string();
         let query_msg = QueryMsg::QueryBalancesMapping {};
-        let response = query(deps.as_ref(), mock_env(), query_msg).unwrap_err();
-        assert_eq!(response, StdError::generic_err("unimplemented"));
+
+        // should be empty at first
+        let response: QueryBalancesMappingResponse =
+            from_binary(&query(deps.as_ref(), mock_env(), query_msg.clone()).unwrap()).unwrap();
+        assert_eq!(response.balance_assets.len(), 0usize);
+
+        // when adding a new balance info, should query new data
+        let balance_info = AssetInfo::Token {
+            contract_addr: Addr::unchecked("contract"),
+        };
+        let lower_bound = Uint128::from(50000u128);
+        let upper_bound = Uint128::from(100000u128);
+        let mut add_new_balance_msg = AddNewBalanceMsg {
+            addr: addr.clone(),
+            balance_info: balance_info.clone(),
+            lower_bound,
+            upper_bound,
+            label: Some("demo_balance".to_string()),
+        };
+        let execute_msg = ExecuteMsg::AddBalance(add_new_balance_msg.clone());
+        test_unauthorized_admin(deps.as_mut(), execute_msg.clone());
+        let admin = mock_info(&String::from("admin"), &[]);
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            admin.clone(),
+            execute_msg.clone(),
+        )
+        .unwrap();
+
+        // add a second balance mapping pair to test query
+        add_new_balance_msg.addr = second_addr.clone();
+        let execute_msg = ExecuteMsg::AddBalance(add_new_balance_msg.clone());
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            admin.clone(),
+            execute_msg.clone(),
+        )
+        .unwrap();
+
+        // when querying it should show two balances info
+        // query to double check if add balance is there
+        let response: QueryBalancesMappingResponse = from_binary(
+            &query(deps.as_ref(), mock_env(), QueryMsg::QueryBalancesMapping {}).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(response.balance_assets.first().unwrap().addr, addr.clone());
+        assert_eq!(
+            response.balance_assets.last().unwrap().addr,
+            second_addr.clone()
+        );
     }
 
     #[test]
@@ -163,9 +216,7 @@ mod tests {
             label: Some("demo_balance".to_string()),
         };
         let execute_msg = ExecuteMsg::AddBalance(add_new_balance_msg.clone());
-
         test_unauthorized_admin(deps.as_mut(), execute_msg.clone());
-
         let admin = mock_info(&String::from("admin"), &[]);
         execute(
             deps.as_mut(),
