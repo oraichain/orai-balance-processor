@@ -435,23 +435,85 @@ mod tests {
         let balance_info = AssetInfo::Token {
             contract_addr: Addr::unchecked("contract"),
         };
+        let second_balance_info = AssetInfo::NativeToken {
+            denom: "orai".to_string(),
+        };
         let lower_bound = Uint128::from(50000u128);
         let upper_bound = Uint128::from(100000u128);
-        let execute_msg = ExecuteMsg::UpdateBalance(UpdateBalanceMsg {
-            addr,
-            balance_info,
-            lower_bound,
-            upper_bound,
+        let mut add_new_balance_msg = AddNewBalanceMsg {
+            addr: addr.clone(),
+            balance_info: balance_info.clone(),
+            lower_bound: Uint128::from(1u128),
+            upper_bound: Uint128::from(10u128),
             label: Some("demo_balance".to_string()),
-        });
-
-        test_unauthorized_admin(deps.as_mut(), execute_msg.clone());
-
+        };
+        let execute_msg = ExecuteMsg::AddBalance(add_new_balance_msg.clone());
         let admin = mock_info(&String::from("admin"), &[]);
-        let response = execute(deps.as_mut(), mock_env(), admin, execute_msg).unwrap_err();
+        // add new balance mapping first before updating it
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            admin.clone(),
+            execute_msg.clone(),
+        )
+        .unwrap();
+        // Add another balance mapping so we can observe the difference when we update for an existing balance info
+        add_new_balance_msg.balance_info = second_balance_info.clone();
+        let execute_msg = ExecuteMsg::AddBalance(add_new_balance_msg);
+        execute(deps.as_mut(), mock_env(), admin, execute_msg).unwrap();
+
+        // now we try to update the balance to new lower & upper bound
+        let execute_msg = ExecuteMsg::UpdateBalance(UpdateBalanceMsg {
+            addr: addr.clone(),
+            balance_info: balance_info.clone(),
+            lower_bound: Some(lower_bound),
+            upper_bound: Some(upper_bound),
+        });
+        test_unauthorized_admin(deps.as_mut(), execute_msg.clone());
+        let admin = mock_info(&String::from("admin"), &[]);
+        execute(deps.as_mut(), mock_env(), admin, execute_msg).unwrap();
+
+        // query to double check if add balance is there
+        let response: QueryBalanceMappingResponse = from_binary(
+            &query(
+                deps.as_ref(),
+                mock_env(),
+                QueryMsg::QueryBalanceMapping { addr: addr.clone() },
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(response.assets[0].lower_bound, lower_bound); // asset info {"contract_addr":"contract"} lower bound & upper bound should be updated
+
+        // balance mapping not exist case
+        // now we try to update the balance to new lower & upper bound
+        let execute_msg = ExecuteMsg::UpdateBalance(UpdateBalanceMsg {
+            addr: "not-exist".to_string(),
+            balance_info: balance_info.clone(),
+            lower_bound: Some(lower_bound),
+            upper_bound: Some(upper_bound),
+        });
+        let admin = mock_info(&String::from("admin"), &[]);
+        let response_err = execute(deps.as_mut(), mock_env(), admin, execute_msg).unwrap_err();
         assert_eq!(
-            response.to_string(),
-            ContractError::Std(StdError::generic_err("unimplemented")).to_string()
+            response_err.to_string(),
+            StdError::generic_err(ContractError::BalanceMappingNotExist {}.to_string()).to_string()
+        );
+
+        // Balance info not exist case
+        let execute_msg = ExecuteMsg::UpdateBalance(UpdateBalanceMsg {
+            addr: addr.clone(),
+            balance_info: AssetInfo::Token {
+                contract_addr: Addr::unchecked("not-exist"),
+            },
+            lower_bound: Some(lower_bound),
+            upper_bound: Some(upper_bound),
+        });
+        let admin = mock_info(&String::from("admin"), &[]);
+        let response_err = execute(deps.as_mut(), mock_env(), admin, execute_msg).unwrap_err();
+        assert_eq!(
+            response_err.to_string(),
+            StdError::generic_err(ContractError::BalanceInfoNotExist {}.to_string()).to_string()
         );
     }
 

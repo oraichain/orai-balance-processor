@@ -37,9 +37,8 @@ pub struct AddNewBalanceMsg {
 pub struct UpdateBalanceMsg {
     pub addr: String,
     pub balance_info: AssetInfo,
-    pub lower_bound: Uint128,
-    pub upper_bound: Uint128,
-    pub label: Option<String>,
+    pub lower_bound: Option<Uint128>,
+    pub upper_bound: Option<Uint128>,
 }
 
 #[cw_serde]

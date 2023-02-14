@@ -51,7 +51,7 @@ pub fn execute(
         ExecuteMsg::UpdateBalance(msg) => update_balance(deps, info, msg),
         ExecuteMsg::DeleteBalance(msg) => delete_balance(deps, info, msg),
         ExecuteMsg::DeleteBalanceMapping(msg) => update_balance_mapping(deps, info, msg),
-        ExecuteMsg::Topup(msg) => topup(deps, info, msg),
+        ExecuteMsg::Topup(msg) => topup(deps, msg),
     }
 }
 
@@ -119,7 +119,43 @@ pub fn update_balance(
     ADMIN
         .assert_admin(deps.as_ref(), &info.sender)
         .map_err(|_| ContractError::InvalidAdmin {})?;
-    Err(ContractError::Std(StdError::generic_err("unimplemented")))
+    let addr = deps.api.addr_validate(&msg.addr)?;
+
+    // if already exist we find the element & update its content
+    BALANCE_INFOS.update(
+        deps.storage,
+        addr,
+        |balance_info| -> StdResult<BalanceInfo> {
+            // if exist then we append the new balance into the list, else we return error
+            if let Some(mut balance_info) = balance_info {
+                // we dont allow repetitive balance info in the list to prevent spamming. We use iter_mut to update an element in the list by mut reference
+                for mut asset_data in balance_info.balances.iter_mut() {
+                    // if found, we update using new data from msg input
+                    if asset_data.asset.eq(&msg.balance_info) {
+                        if let Some(lower_bound) = msg.lower_bound {
+                            asset_data.lower_bound = lower_bound;
+                        }
+                        if let Some(upper_bound) = msg.upper_bound {
+                            asset_data.upper_bound = upper_bound;
+                        }
+                        return Ok(balance_info);
+                    }
+                }
+                return Err(StdError::generic_err(
+                    ContractError::BalanceInfoNotExist {}.to_string(),
+                ));
+            }
+            Err(StdError::generic_err(
+                ContractError::BalanceMappingNotExist {}.to_string(),
+            ))
+        },
+    )?;
+    // send response
+    let res = Response::new()
+        .add_attribute("action", "update_balance")
+        .add_attribute("addr", msg.addr)
+        .add_attribute("asset_info", msg.balance_info.to_string());
+    Ok(res)
 }
 
 pub fn delete_balance(
@@ -144,7 +180,7 @@ pub fn update_balance_mapping(
     Err(ContractError::Std(StdError::generic_err("unimplemented")))
 }
 
-pub fn topup(deps: DepsMut, _info: MessageInfo, msg: TopupMsg) -> Result<Response, ContractError> {
+pub fn topup(deps: DepsMut, msg: TopupMsg) -> Result<Response, ContractError> {
     let mut sanity_checks: Vec<TopupSanityCheck> = vec![]; // use for sanity check. One address with one asset should only be top up once.
     let mut cosmos_msgs: Vec<CosmosMsg> = vec![];
     for balance_topup in msg.balances.into_iter() {
@@ -170,7 +206,11 @@ pub fn topup(deps: DepsMut, _info: MessageInfo, msg: TopupMsg) -> Result<Respons
 
             // if mapped asset is in the mapping list, and its balance is le than the lower bound => include in the list
             if let Some(mapped_asset) = mapped_asset {
-                if current_balance_result?.amount.le(&mapped_asset.lower_bound) {
+                if current_balance_result
+                    .unwrap()
+                    .amount
+                    .le(&mapped_asset.lower_bound)
+                {
                     // top-up the asset til the upper bound amount only
                     // sanity check to prevent reentrancy (multiple same low balance assets to drain tokens)
                     if sanity_checks
