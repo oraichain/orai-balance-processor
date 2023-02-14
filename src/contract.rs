@@ -1,8 +1,9 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    to_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdError, StdResult,
+    to_binary, Binary, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response, StdError, StdResult,
 };
+use oraiswap::asset::Asset;
 // use cw2::set_contract_version;
 
 use crate::error::ContractError;
@@ -10,7 +11,8 @@ use crate::helpers::query_balance;
 use crate::msg::{
     AddNewBalanceMsg, BalancesMappingQuery, BalancesQuery, DeleteBalanceMappingMsg,
     DeleteBalanceMsg, ExecuteMsg, InstantiateMsg, QueryBalanceMappingResponse,
-    QueryBalancesMappingResponse, QueryLowBalancesResponse, QueryMsg, TopupMsg, UpdateBalanceMsg,
+    QueryBalancesMappingResponse, QueryLowBalancesResponse, QueryMsg, TopupMsg, TopupSanityCheck,
+    UpdateBalanceMsg,
 };
 use crate::state::{AssetData, BalanceInfo, ADMIN, BALANCE_INFOS};
 
@@ -142,8 +144,71 @@ pub fn update_balance_mapping(
     Err(ContractError::Std(StdError::generic_err("unimplemented")))
 }
 
-pub fn topup(deps: DepsMut, info: MessageInfo, msg: TopupMsg) -> Result<Response, ContractError> {
-    Err(ContractError::Std(StdError::generic_err("unimplemented")))
+pub fn topup(deps: DepsMut, _info: MessageInfo, msg: TopupMsg) -> Result<Response, ContractError> {
+    let mut sanity_checks: Vec<TopupSanityCheck> = vec![]; // use for sanity check. One address with one asset should only be top up once.
+    let mut cosmos_msgs: Vec<CosmosMsg> = vec![];
+    for balance_topup in msg.balances.into_iter() {
+        // query balance mapping, then find matching asset, if current balance is lower than low_bound then add into the top-up list
+        let balance_mapping =
+            query_balance_mapping(deps.as_ref(), balance_topup.addr.clone().to_string())?;
+        for asset_info in balance_topup.asset_infos {
+            let current_balance_result = query_balance(
+                deps.as_ref(),
+                balance_topup.addr.clone().into_string(),
+                asset_info.clone(),
+            );
+            // we will not top-up error balance
+            if current_balance_result.is_err() {
+                continue;
+            }
+            // find asset_info in the balance mapping list
+            let mapped_asset = balance_mapping
+                .assets
+                .clone()
+                .into_iter()
+                .find(|asset_data| asset_data.asset.eq(&asset_info));
+
+            // if mapped asset is in the mapping list, and its balance is le than the lower bound => include in the list
+            if let Some(mapped_asset) = mapped_asset {
+                if current_balance_result?.amount.le(&mapped_asset.lower_bound) {
+                    // top-up the asset til the upper bound amount only
+                    // sanity check to prevent reentrancy (multiple same low balance assets to drain tokens)
+                    if sanity_checks
+                        .clone()
+                        .into_iter()
+                        .find(|check| {
+                            check.addr.eq(&balance_topup.addr) && check.asset_info.eq(&asset_info)
+                        })
+                        .is_some()
+                    {
+                        continue;
+                    };
+                    sanity_checks.push(TopupSanityCheck {
+                        addr: balance_topup.addr.clone(),
+                        asset_info: asset_info.clone(),
+                    });
+                    cosmos_msgs.push(
+                        Asset {
+                            amount: mapped_asset.upper_bound, // top-up the asset til the upper bound amount only
+                            info: asset_info,
+                        }
+                        .into_msg(
+                            None,
+                            &deps.querier,
+                            balance_topup.addr.clone(),
+                        )?,
+                    );
+                }
+            }
+        }
+    }
+    let cosmos_msgs_length = cosmos_msgs.len().to_string();
+    // send response
+    let res = Response::new()
+        .add_messages(cosmos_msgs)
+        .add_attribute("action", "topup")
+        .add_attribute("topup_msgs_length", cosmos_msgs_length);
+    Ok(res)
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]

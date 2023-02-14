@@ -55,7 +55,7 @@ pub struct DeleteBalanceMappingMsg {
 
 #[cw_serde]
 pub struct TopupMsg {
-    pub assets: Vec<Asset>,
+    pub balances: Vec<TopupBalancesMsg>,
 }
 
 #[cw_serde]
@@ -107,4 +107,17 @@ pub struct BalancesQuery {
     pub addr: Addr,
     pub label: String,
     pub assets: Vec<Asset>,
+}
+
+#[cw_serde]
+pub struct TopupBalancesMsg {
+    pub addr: Addr,
+    pub asset_infos: Vec<AssetInfo>,
+}
+
+/// This struct is solely used to verify if there's a top-up msg for a given addr & asset info or not
+#[cw_serde]
+pub struct TopupSanityCheck {
+    pub addr: Addr,
+    pub asset_info: AssetInfo,
 }
