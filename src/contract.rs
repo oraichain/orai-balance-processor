@@ -50,7 +50,7 @@ pub fn execute(
         ExecuteMsg::AddBalance(msg) => add_balance(deps, info, msg),
         ExecuteMsg::UpdateBalance(msg) => update_balance(deps, info, msg),
         ExecuteMsg::DeleteBalance(msg) => delete_balance(deps, info, msg),
-        ExecuteMsg::DeleteBalanceMapping(msg) => update_balance_mapping(deps, info, msg),
+        ExecuteMsg::DeleteBalanceMapping(msg) => delete_balance_mapping(deps, info, msg),
         ExecuteMsg::Topup(msg) => topup(deps, msg),
     }
 }
@@ -169,7 +169,7 @@ pub fn delete_balance(
     Err(ContractError::Std(StdError::generic_err("unimplemented")))
 }
 
-pub fn update_balance_mapping(
+pub fn delete_balance_mapping(
     deps: DepsMut,
     info: MessageInfo,
     msg: DeleteBalanceMappingMsg,
