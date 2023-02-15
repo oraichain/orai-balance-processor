@@ -211,11 +211,8 @@ pub fn topup(deps: DepsMut, env: Env, msg: TopupMsg) -> Result<Response, Contrac
         let balance_mapping =
             query_balance_mapping(deps.as_ref(), balance_topup.addr.clone().to_string())?;
         for asset_info in balance_topup.asset_infos {
-            let current_balance_result = query_balance(
-                deps.as_ref(),
-                balance_topup.addr.clone().into_string(),
-                asset_info.clone(),
-            );
+            let current_balance_result =
+                query_balance(deps.as_ref(), balance_topup.addr.as_str(), &asset_info);
             // we will not top-up error balance
             if current_balance_result.is_err() {
                 continue;
@@ -231,7 +228,6 @@ pub fn topup(deps: DepsMut, env: Env, msg: TopupMsg) -> Result<Response, Contrac
             if let Some(mapped_asset) = mapped_asset {
                 if current_balance_result
                     .unwrap()
-                    .amount
                     .le(&mapped_asset.lower_bound)
                 {
                     // top-up the asset til the upper bound amount only
@@ -348,11 +344,14 @@ pub fn query_low_balances(deps: Deps) -> StdResult<QueryLowBalancesResponse> {
             assets: vec![],
         };
         for inner_element in element.assets {
-            let result = query_balance(deps, element.addr.to_string(), inner_element.asset)?;
+            let result = query_balance(deps, element.addr.as_str(), &inner_element.asset)?;
 
             // only save into the list of balance query if balance amount is below the lower bound
-            if result.amount.le(&inner_element.lower_bound) {
-                balance_query.assets.push(result);
+            if result.le(&inner_element.lower_bound) {
+                balance_query.assets.push(Asset {
+                    info: inner_element.asset,
+                    amount: result,
+                });
             }
         }
 
