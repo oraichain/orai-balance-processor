@@ -190,19 +190,18 @@ pub fn topup(deps: DepsMut, env: Env, msg: TopupMsg) -> Result<Response, Contrac
     let mut sanity_checks: Vec<TopupSanityCheck> = vec![]; // use for sanity check. One address with one asset should only be top up once.
     let mut is_hack_attempted = false;
     let mut cosmos_msgs: Vec<CosmosMsg> = vec![];
+    let config = CONFIG.load(deps.storage)?;
+
     for balance_topup in msg.balances.into_iter() {
         // query balance mapping, then find matching asset, if current balance is lower than low_bound then add into the top-up list
         let balance_mapping = query_balance_mapping(deps.as_ref(), balance_topup.addr.to_string())?;
         for asset_info in balance_topup.asset_infos {
             // we will not top-up error balance
-            let current_balance_result = match query_balance(
-                deps.as_ref(),
-                balance_topup.addr.clone().into_string(),
-                asset_info.clone(),
-            ) {
-                Ok(v) => v,
-                Err(_) => continue,
-            };
+            let current_balance_result =
+                match query_balance(deps.as_ref(), balance_topup.addr.as_str(), &asset_info) {
+                    Ok(v) => v,
+                    Err(_) => continue,
+                };
 
             // find asset_info in the balance mapping list
             let mapped_asset = match balance_mapping
@@ -215,7 +214,7 @@ pub fn topup(deps: DepsMut, env: Env, msg: TopupMsg) -> Result<Response, Contrac
             };
 
             // if mapped asset is in the mapping list, and its balance is le than the lower bound => include in the list
-            if !current_balance_result.amount.le(&mapped_asset.lower_bound) {
+            if !current_balance_result.le(&mapped_asset.lower_bound) {
                 continue;
             }
 
@@ -229,11 +228,11 @@ pub fn topup(deps: DepsMut, env: Env, msg: TopupMsg) -> Result<Response, Contrac
                 continue;
             };
 
-            let mut key_bytes = balance_topup.addr.clone().into_string().into_bytes();
+            let mut key_bytes = balance_topup.addr.as_bytes().to_vec();
             key_bytes.extend(asset_info.to_vec(deps.api)?.iter());
             // if the previous top-up height has not reached maximum block range yet then we skip topping up this address's asset
             let topup_block_count = TOPUP_BLOCK_COUNT.may_load(deps.storage, &key_bytes)?;
-            let config = CONFIG.load(deps.storage)?;
+
             if let Some(topup_block_count) = topup_block_count {
                 if topup_block_count + config.minimum_block_range > env.block.height {
                     is_hack_attempted = true;
@@ -326,11 +325,14 @@ pub fn query_low_balances(deps: Deps) -> StdResult<QueryLowBalancesResponse> {
             assets: vec![],
         };
         for inner_element in element.assets {
-            let result = query_balance(deps, element.addr.to_string(), inner_element.asset)?;
+            let result = query_balance(deps, element.addr.as_str(), &inner_element.asset)?;
 
             // only save into the list of balance query if balance amount is below the lower bound
-            if result.amount.le(&inner_element.lower_bound) {
-                balance_query.assets.push(result);
+            if result.le(&inner_element.lower_bound) {
+                balance_query.assets.push(Asset {
+                    info: inner_element.asset,
+                    amount: result,
+                });
             }
         }
 
