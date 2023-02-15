@@ -98,7 +98,8 @@ mod tests {
     use cosmwasm_std::{
         coins, from_binary,
         testing::{mock_env, mock_info},
-        to_binary, Addr, BankMsg, CosmosMsg, DepsMut, StdError, StdResult, Uint128, WasmMsg,
+        to_binary, Addr, BankMsg, BlockInfo, CosmosMsg, DepsMut, StdError, StdResult, Uint128,
+        WasmMsg,
     };
     use cw20::Cw20ExecuteMsg;
     use cw_controllers::AdminResponse;
@@ -108,9 +109,9 @@ mod tests {
     };
 
     use crate::{
-        contract::{execute, query},
+        contract::{execute, query, MINIMUM_BLOCK_RANGE},
         msg::{
-            AddNewBalanceMsg, BalancesQuery, DeleteBalanceMappingMsg, DeleteBalanceMsg, ExecuteMsg,
+            AddNewBalanceMsg, BalancesQuery, DeleteBalanceMappingMsg, ExecuteMsg,
             QueryBalanceMappingResponse, QueryBalancesMappingResponse, QueryLowBalancesResponse,
             QueryMsg, TopupBalancesMsg, TopupMsg, UpdateBalanceMsg,
         },
@@ -518,25 +519,6 @@ mod tests {
     }
 
     #[test]
-    fn test_delete_balance() {
-        let mut deps = setup();
-        let addr = "addr".to_string();
-        let balance_info = AssetInfo::Token {
-            contract_addr: Addr::unchecked("contract"),
-        };
-        let execute_msg = ExecuteMsg::DeleteBalance(DeleteBalanceMsg { addr, balance_info });
-
-        test_unauthorized_admin(deps.as_mut(), execute_msg.clone());
-
-        let admin = mock_info(&String::from("admin"), &[]);
-        let response = execute(deps.as_mut(), mock_env(), admin, execute_msg).unwrap_err();
-        assert_eq!(
-            response.to_string(),
-            ContractError::Std(StdError::generic_err("unimplemented")).to_string()
-        );
-    }
-
-    #[test]
     fn test_delete_balance_mapping() {
         let mut deps = setup();
         let addr = "addr".to_string();
@@ -557,6 +539,7 @@ mod tests {
         let native_balance_info_denom = "orai".to_string();
         let cw20_balance_info_address = cw20_addr.to_string();
         let admin_addr = admin.sender;
+        let native_balance_info_upper_bound = Uint128::from(100u128);
         // init msgs to send the admin addr some cw20 & native tokens
         deps.execute(
             addr.clone(),
@@ -591,7 +574,7 @@ mod tests {
                     denom: native_balance_info_denom.clone(),
                 },
                 lower_bound: Uint128::from(11u128), // current balance is 10u128, should trigger low balance
-                upper_bound: Uint128::from(100u128),
+                upper_bound: native_balance_info_upper_bound.clone(),
                 label: Some("demo_balance".to_string()),
             }),
             &vec![],
@@ -695,12 +678,8 @@ mod tests {
                 &vec![],
             )
             .unwrap();
-        println!(
-            "response: {:?}",
-            response.events[1].attributes.last().unwrap().value // key: topup_msgs_length
-        );
-
         assert_eq!(response.events[1].attributes.last().unwrap().value, "1");
+        assert_eq!(response.events[1].attributes[2].value, "true");
 
         // after topping up, should not have any low balance
         let response: QueryLowBalancesResponse = deps
@@ -708,5 +687,46 @@ mod tests {
             .query_wasm_smart(addr.clone().into_string(), &QueryMsg::QueryLowBalances {})
             .unwrap();
         assert_eq!(response.low_balance_assets.len(), 0usize);
+
+        // wallet hack case. Asset is drained, and hacker will call multiple top-up txs in a short period. Should reject & only allow top-up once per day for an asset
+        // pretend that the mock addr is hacked & sent all top-up tokens back to contract
+        deps.execute(
+            mock_addr.sender.clone(),
+            CosmosMsg::Bank(BankMsg::Send {
+                to_address: addr.clone().into_string(),
+                amount: coins(
+                    native_balance_info_upper_bound.u128(),
+                    native_balance_info_denom.clone(),
+                ),
+            }),
+        )
+        .unwrap();
+        // now we try to top-up again immediately afterwards => should fail
+        let response = deps
+            .execute_contract(
+                admin.sender.clone(),
+                addr.clone(),
+                &execute_msg.clone(),
+                &vec![],
+            )
+            .unwrap();
+        assert_eq!(response.events[1].attributes.last().unwrap().value, "0");
+        assert_eq!(response.events[1].attributes[2].value, "true");
+
+        // we need to wait for at least a day to re-topup
+        let mut block_info = deps.block_info();
+        block_info.height += MINIMUM_BLOCK_RANGE + 1;
+        deps.set_block(block_info);
+
+        // now we can top-up
+        let response = deps
+            .execute_contract(
+                admin.sender.clone(),
+                addr.clone(),
+                &execute_msg.clone(),
+                &vec![],
+            )
+            .unwrap();
+        assert_eq!(response.events[1].attributes.last().unwrap().value, "1");
     }
 }

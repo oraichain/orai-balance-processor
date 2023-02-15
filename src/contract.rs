@@ -1,7 +1,8 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    to_binary, Binary, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response, StdError, StdResult,
+    attr, to_binary, Binary, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response, StdError,
+    StdResult,
 };
 use oraiswap::asset::Asset;
 // use cw2::set_contract_version;
@@ -9,12 +10,16 @@ use oraiswap::asset::Asset;
 use crate::error::ContractError;
 use crate::helpers::query_balance;
 use crate::msg::{
-    AddNewBalanceMsg, BalancesMappingQuery, BalancesQuery, DeleteBalanceMappingMsg,
-    DeleteBalanceMsg, ExecuteMsg, InstantiateMsg, QueryBalanceMappingResponse,
-    QueryBalancesMappingResponse, QueryLowBalancesResponse, QueryMsg, TopupMsg, TopupSanityCheck,
-    UpdateBalanceMsg,
+    AddNewBalanceMsg, BalancesMappingQuery, BalancesQuery, DeleteBalanceMappingMsg, ExecuteMsg,
+    InstantiateMsg, QueryBalanceMappingResponse, QueryBalancesMappingResponse,
+    QueryLowBalancesResponse, QueryMsg, TopupMsg, TopupSanityCheck, UpdateBalanceMsg,
+    UpdateConfigMsg,
 };
-use crate::state::{AssetData, BalanceInfo, ADMIN, BALANCE_INFOS};
+use crate::state::{
+    AssetData, BalanceInfo, Config, ADMIN, BALANCE_INFOS, CONFIG, TOPUP_BLOCK_COUNT,
+};
+
+pub const MINIMUM_BLOCK_RANGE: u64 = 14896; // approx a day
 
 /*
 // version info for migration info
@@ -30,13 +35,19 @@ pub fn instantiate(
     _msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
     ADMIN.set(deps.branch(), Some(info.sender.clone()))?;
+    CONFIG.save(
+        deps.storage,
+        &Config {
+            minimum_block_range: MINIMUM_BLOCK_RANGE,
+        },
+    )?;
     Ok(Response::new().add_attribute("admin", info.sender.to_string()))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn execute(
     mut deps: DepsMut,
-    _env: Env,
+    env: Env,
     info: MessageInfo,
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
@@ -49,10 +60,30 @@ pub fn execute(
         }
         ExecuteMsg::AddBalance(msg) => add_balance(deps, info, msg),
         ExecuteMsg::UpdateBalance(msg) => update_balance(deps, info, msg),
-        ExecuteMsg::DeleteBalance(msg) => delete_balance(deps, info, msg),
         ExecuteMsg::DeleteBalanceMapping(msg) => delete_balance_mapping(deps, info, msg),
-        ExecuteMsg::Topup(msg) => topup(deps, msg),
+        ExecuteMsg::Topup(msg) => topup(deps, env, msg),
+        ExecuteMsg::UpdateConfig(msg) => update_config(deps, info, msg),
     }
+}
+
+pub fn update_config(
+    deps: DepsMut,
+    info: MessageInfo,
+    msg: UpdateConfigMsg,
+) -> Result<Response, ContractError> {
+    ADMIN
+        .assert_admin(deps.as_ref(), &info.sender)
+        .map_err(|_| ContractError::InvalidAdmin {})?;
+
+    CONFIG.update(deps.storage, |mut config| -> StdResult<Config> {
+        if let Some(minimum_block_range) = msg.minimum_block_range {
+            config.minimum_block_range = minimum_block_range;
+        }
+        Ok(config)
+    })?;
+    // send response
+    let res = Response::new().add_attributes(vec![attr("action", "update_config")]);
+    Ok(res)
 }
 
 pub fn add_balance(
@@ -102,12 +133,13 @@ pub fn add_balance(
         },
     )?;
     // send response
-    let res = Response::new()
-        .add_attribute("action", "add_balance")
-        .add_attribute("addr", msg.addr)
-        .add_attribute("balance_info", msg.balance_info.to_string())
-        .add_attribute("lower_bound", msg.lower_bound)
-        .add_attribute("upper_bound", msg.upper_bound);
+    let res = Response::new().add_attributes(vec![
+        attr("action", "add_balance"),
+        attr("addr", msg.addr),
+        attr("balance_info", msg.balance_info.to_string()),
+        attr("lower_bound", msg.lower_bound),
+        attr("upper_bound", msg.upper_bound),
+    ]);
     Ok(res)
 }
 
@@ -151,22 +183,12 @@ pub fn update_balance(
         },
     )?;
     // send response
-    let res = Response::new()
-        .add_attribute("action", "update_balance")
-        .add_attribute("addr", msg.addr)
-        .add_attribute("asset_info", msg.balance_info.to_string());
+    let res = Response::new().add_attributes(vec![
+        attr("action", "update_balance"),
+        attr("addr", msg.addr),
+        attr("asset_info", msg.balance_info.to_string()),
+    ]);
     Ok(res)
-}
-
-pub fn delete_balance(
-    deps: DepsMut,
-    info: MessageInfo,
-    msg: DeleteBalanceMsg,
-) -> Result<Response, ContractError> {
-    ADMIN
-        .assert_admin(deps.as_ref(), &info.sender)
-        .map_err(|_| ContractError::InvalidAdmin {})?;
-    Err(ContractError::Std(StdError::generic_err("unimplemented")))
 }
 
 pub fn delete_balance_mapping(
@@ -180,8 +202,9 @@ pub fn delete_balance_mapping(
     Err(ContractError::Std(StdError::generic_err("unimplemented")))
 }
 
-pub fn topup(deps: DepsMut, msg: TopupMsg) -> Result<Response, ContractError> {
+pub fn topup(deps: DepsMut, env: Env, msg: TopupMsg) -> Result<Response, ContractError> {
     let mut sanity_checks: Vec<TopupSanityCheck> = vec![]; // use for sanity check. One address with one asset should only be top up once.
+    let mut is_hack_attempted = false;
     let mut cosmos_msgs: Vec<CosmosMsg> = vec![];
     for balance_topup in msg.balances.into_iter() {
         // query balance mapping, then find matching asset, if current balance is lower than low_bound then add into the top-up list
@@ -221,8 +244,20 @@ pub fn topup(deps: DepsMut, msg: TopupMsg) -> Result<Response, ContractError> {
                         })
                         .is_some()
                     {
+                        is_hack_attempted = true;
                         continue;
                     };
+                    let mut key_bytes = balance_topup.addr.clone().into_string().into_bytes();
+                    key_bytes.extend(asset_info.to_vec(deps.api)?.iter());
+                    // if the previous top-up height has not reached maximum block range yet then we skip topping up this address's asset
+                    let topup_block_count = TOPUP_BLOCK_COUNT.may_load(deps.storage, &key_bytes)?;
+                    let config = CONFIG.load(deps.storage)?;
+                    if let Some(topup_block_count) = topup_block_count {
+                        if topup_block_count + config.minimum_block_range > env.block.height {
+                            is_hack_attempted = true;
+                            continue;
+                        }
+                    }
                     sanity_checks.push(TopupSanityCheck {
                         addr: balance_topup.addr.clone(),
                         asset_info: asset_info.clone(),
@@ -230,7 +265,7 @@ pub fn topup(deps: DepsMut, msg: TopupMsg) -> Result<Response, ContractError> {
                     cosmos_msgs.push(
                         Asset {
                             amount: mapped_asset.upper_bound, // top-up the asset til the upper bound amount only
-                            info: asset_info,
+                            info: asset_info.clone(),
                         }
                         .into_msg(
                             None,
@@ -238,6 +273,8 @@ pub fn topup(deps: DepsMut, msg: TopupMsg) -> Result<Response, ContractError> {
                             balance_topup.addr.clone(),
                         )?,
                     );
+                    // store top-up height for the given asset & address
+                    TOPUP_BLOCK_COUNT.save(deps.storage, &key_bytes, &env.block.height)?;
                 }
             }
         }
@@ -247,6 +284,7 @@ pub fn topup(deps: DepsMut, msg: TopupMsg) -> Result<Response, ContractError> {
     let res = Response::new()
         .add_messages(cosmos_msgs)
         .add_attribute("action", "topup")
+        .add_attribute("is_hack_attempted", is_hack_attempted.to_string())
         .add_attribute("topup_msgs_length", cosmos_msgs_length);
     Ok(res)
 }

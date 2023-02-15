@@ -14,14 +14,20 @@ pub enum ExecuteMsg {
     AddBalance(AddNewBalanceMsg),
     /// Update an existing balance array element for a given asset info
     UpdateBalance(UpdateBalanceMsg),
-    /// Delete a balance array element
-    DeleteBalance(DeleteBalanceMsg),
     /// Delete a balance mapping meaning removing the asset info in the mapping
     DeleteBalanceMapping(DeleteBalanceMappingMsg),
     /// Topup low balances if needed
     Topup(TopupMsg),
     /// Update new admin
-    UpdateAdmin { new_admin: String },
+    UpdateAdmin {
+        new_admin: String,
+    },
+    UpdateConfig(UpdateConfigMsg),
+}
+
+#[cw_serde]
+pub struct UpdateConfigMsg {
+    pub minimum_block_range: Option<u64>,
 }
 
 #[cw_serde]
@@ -39,12 +45,6 @@ pub struct UpdateBalanceMsg {
     pub balance_info: AssetInfo,
     pub lower_bound: Option<Uint128>,
     pub upper_bound: Option<Uint128>,
-}
-
-#[cw_serde]
-pub struct DeleteBalanceMsg {
-    pub addr: String,
-    pub balance_info: AssetInfo,
 }
 
 #[cw_serde]
