@@ -50,7 +50,7 @@ fn init_multitest() -> (App, Addr, Addr, MessageInfo) {
     // mint admin wallet orai so it can distribute to other wallets in test cases
     router
         .sudo(SudoMsg::Bank(BankSudo::Mint {
-            to_address: admin.sender.clone().to_string(),
+            to_address: admin.sender.to_string(),
             amount: admin.clone().funds,
         }))
         .unwrap();
@@ -102,7 +102,7 @@ mod tests {
         WasmMsg,
     };
     use cw20::Cw20ExecuteMsg;
-    use cw_controllers::AdminResponse;
+    use cw_controllers::{AdminError, AdminResponse};
     use oraiswap::{
         asset::{Asset, AssetInfo},
         cw_multi_test::{BankSudo, Executor, SudoMsg},
@@ -133,10 +133,7 @@ mod tests {
     fn test_unauthorized_admin(deps: DepsMut, msg: ExecuteMsg) {
         let acc = mock_info(&String::from("unauthorized"), &[]);
         let response = execute(deps, mock_env(), acc, msg).unwrap_err();
-        assert_eq!(
-            response.to_string(),
-            ContractError::InvalidAdmin {}.to_string()
-        );
+        assert_eq!(response, ContractError::Admin(AdminError::NotAdmin {}));
     }
 
     #[test]
@@ -206,13 +203,12 @@ mod tests {
         let query_msg = QueryMsg::QueryBalanceMapping { addr: addr.clone() };
 
         // should be empty at first
-        let response = &query(deps.as_ref(), mock_env(), query_msg.clone()).unwrap_err();
+        let response = query(deps.as_ref(), mock_env(), query_msg.clone()).unwrap_err();
         assert_eq!(
-            response.to_string(),
+            response,
             StdError::NotFound {
                 kind: "oraiswap_balance_processor::state::BalanceInfo".to_string()
             }
-            .to_string()
         );
 
         // when adding a new balance info, should query new data
@@ -267,7 +263,7 @@ mod tests {
         deps.execute(
             addr.clone(),
             BankMsg::Send {
-                to_address: mock_addr.sender.clone().into_string(),
+                to_address: mock_addr.sender.to_string(),
                 amount: coins(10u128, native_balance_info_denom.clone()),
             }
             .into(),
@@ -278,7 +274,7 @@ mod tests {
             admin_addr.clone(),
             cw20_addr.clone(),
             &Cw20ExecuteMsg::Mint {
-                recipient: mock_addr.sender.clone().to_string(),
+                recipient: mock_addr.sender.to_string(),
                 amount: Uint128::from(100u128),
             },
             &vec![],
@@ -291,7 +287,7 @@ mod tests {
             admin_addr.clone(),
             addr.clone(),
             &ExecuteMsg::AddBalance(AddNewBalanceMsg {
-                addr: mock_addr.sender.clone().to_string(),
+                addr: mock_addr.sender.to_string(),
                 balance_info: AssetInfo::NativeToken {
                     denom: native_balance_info_denom.clone(),
                 },
@@ -308,7 +304,7 @@ mod tests {
             admin_addr.clone(),
             addr.clone(),
             &ExecuteMsg::AddBalance(AddNewBalanceMsg {
-                addr: mock_addr.sender.clone().to_string(),
+                addr: mock_addr.sender.to_string(),
                 balance_info: AssetInfo::Token {
                     contract_addr: Addr::unchecked(&cw20_balance_info_address.clone()),
                 },
@@ -323,7 +319,7 @@ mod tests {
         // query low balance, should return only native balance because it is lower than lower bound
         let response: QueryLowBalancesResponse = deps
             .wrap()
-            .query_wasm_smart(addr.clone().into_string(), &QueryMsg::QueryLowBalances {})
+            .query_wasm_smart(addr.to_string(), &QueryMsg::QueryLowBalances {})
             .unwrap();
         assert_eq!(
             response
@@ -343,7 +339,7 @@ mod tests {
         deps.execute(
             addr.clone(),
             BankMsg::Send {
-                to_address: mock_addr.sender.clone().to_string(),
+                to_address: mock_addr.sender.to_string(),
                 amount: coins(100u128, native_balance_info_denom.clone()),
             }
             .into(),
@@ -352,7 +348,7 @@ mod tests {
 
         let response: QueryLowBalancesResponse = deps
             .wrap()
-            .query_wasm_smart(addr.clone().into_string(), &QueryMsg::QueryLowBalances {})
+            .query_wasm_smart(addr.to_string(), &QueryMsg::QueryLowBalances {})
             .unwrap();
         assert_eq!(response.low_balance_assets.len(), 0usize);
     }
@@ -398,10 +394,7 @@ mod tests {
             execute_msg.clone(),
         )
         .unwrap_err();
-        assert_eq!(
-            response.to_string(),
-            StdError::generic_err(ContractError::BalanceInfoExists {}.to_string()).to_string()
-        );
+        assert_eq!(response, ContractError::BalanceInfoExists {});
 
         // we can append to the list if balance info is different
         add_new_balance_msg.balance_info = second_balance_info.clone();
@@ -496,10 +489,7 @@ mod tests {
         });
         let admin = mock_info(&String::from("admin"), &[]);
         let response_err = execute(deps.as_mut(), mock_env(), admin, execute_msg).unwrap_err();
-        assert_eq!(
-            response_err.to_string(),
-            StdError::generic_err(ContractError::BalanceMappingNotExist {}.to_string()).to_string()
-        );
+        assert_eq!(response_err, ContractError::BalanceMappingNotExist {});
 
         // Balance info not exist case
         let execute_msg = ExecuteMsg::UpdateBalance(UpdateBalanceMsg {
@@ -512,10 +502,7 @@ mod tests {
         });
         let admin = mock_info(&String::from("admin"), &[]);
         let response_err = execute(deps.as_mut(), mock_env(), admin, execute_msg).unwrap_err();
-        assert_eq!(
-            response_err.to_string(),
-            StdError::generic_err(ContractError::BalanceInfoNotExist {}.to_string()).to_string()
-        );
+        assert_eq!(response_err, ContractError::BalanceInfoNotExist {});
     }
 
     #[test]
@@ -527,8 +514,8 @@ mod tests {
         let admin = mock_info(&String::from("admin"), &[]);
         let response = execute(deps.as_mut(), mock_env(), admin, execute_msg).unwrap_err();
         assert_eq!(
-            response.to_string(),
-            ContractError::Std(StdError::generic_err("unimplemented")).to_string()
+            response,
+            ContractError::Std(StdError::generic_err("unimplemented"))
         );
     }
 
@@ -544,7 +531,7 @@ mod tests {
         deps.execute(
             addr.clone(),
             BankMsg::Send {
-                to_address: mock_addr.sender.clone().into_string(),
+                to_address: mock_addr.sender.to_string(),
                 amount: coins(10u128, native_balance_info_denom.clone()),
             }
             .into(),
@@ -556,7 +543,7 @@ mod tests {
             admin_addr.clone(),
             cw20_addr.clone(),
             &Cw20ExecuteMsg::Mint {
-                recipient: mock_addr.sender.clone().to_string(),
+                recipient: mock_addr.sender.to_string(),
                 amount: Uint128::from(100u128),
             },
             &vec![],
@@ -569,7 +556,7 @@ mod tests {
             admin_addr.clone(),
             addr.clone(),
             &ExecuteMsg::AddBalance(AddNewBalanceMsg {
-                addr: mock_addr.sender.clone().to_string(),
+                addr: mock_addr.sender.to_string(),
                 balance_info: AssetInfo::NativeToken {
                     denom: native_balance_info_denom.clone(),
                 },
@@ -586,7 +573,7 @@ mod tests {
             admin_addr.clone(),
             addr.clone(),
             &ExecuteMsg::AddBalance(AddNewBalanceMsg {
-                addr: mock_addr.sender.clone().to_string(),
+                addr: mock_addr.sender.to_string(),
                 balance_info: AssetInfo::Token {
                     contract_addr: Addr::unchecked(&cw20_balance_info_address.clone()),
                 },
@@ -600,7 +587,7 @@ mod tests {
 
         // mint new not-in-list-denom to mock addr, this would help pass the non-existed error
         deps.sudo(SudoMsg::Bank(BankSudo::Mint {
-            to_address: admin_addr.clone().to_string(),
+            to_address: admin_addr.to_string(),
             amount: coins(1u128, "not-in-list-denom"),
         }))
         .unwrap();
@@ -608,13 +595,13 @@ mod tests {
         // before top-up, orai denom is in low balance for mock addr
         let response: QueryLowBalancesResponse = deps
             .wrap()
-            .query_wasm_smart(addr.clone().into_string(), &QueryMsg::QueryLowBalances {})
+            .query_wasm_smart(addr.to_string(), &QueryMsg::QueryLowBalances {})
             .unwrap();
         assert_eq!(response.low_balance_assets.len(), 1usize);
         assert_eq!(
             response.low_balance_assets[0].assets[0].info,
             AssetInfo::NativeToken {
-                denom: native_balance_info_denom.clone().to_string()
+                denom: native_balance_info_denom.to_string()
             }
         );
 
@@ -684,7 +671,7 @@ mod tests {
         // after topping up, should not have any low balance
         let response: QueryLowBalancesResponse = deps
             .wrap()
-            .query_wasm_smart(addr.clone().into_string(), &QueryMsg::QueryLowBalances {})
+            .query_wasm_smart(addr.to_string(), &QueryMsg::QueryLowBalances {})
             .unwrap();
         assert_eq!(response.low_balance_assets.len(), 0usize);
 
@@ -693,7 +680,7 @@ mod tests {
         deps.execute(
             mock_addr.sender.clone(),
             CosmosMsg::Bank(BankMsg::Send {
-                to_address: addr.clone().into_string(),
+                to_address: addr.to_string(),
                 amount: coins(
                     native_balance_info_upper_bound.u128(),
                     native_balance_info_denom.clone(),

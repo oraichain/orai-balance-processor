@@ -1,17 +1,13 @@
 use cosmwasm_std::StdError;
+use cw_controllers::AdminError;
 use thiserror::Error;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, PartialEq)]
 pub enum ContractError {
     #[error("{0}")]
     Std(#[from] StdError),
-
-    #[error("Unauthorized")]
-    Unauthorized {},
-    #[error("Admin is none. Admin cannot be none!")]
-    AdminEmpty {},
-    #[error("Caller is not an admin. Cannot call this function")]
-    InvalidAdmin {},
+    #[error("{0}")]
+    Admin(#[from] AdminError),
     #[error("Balance info of the given address already exists in the list. Cannot add more")]
     BalanceInfoExists {},
     #[error("Balance info of the given address does not exist. Cannot update")]
