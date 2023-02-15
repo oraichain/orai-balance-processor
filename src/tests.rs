@@ -4,7 +4,7 @@ use crate::msg::InstantiateMsg;
 use cosmwasm_std::testing::{
     mock_dependencies, mock_env, mock_info, MockApi, MockQuerier, MockStorage,
 };
-use cosmwasm_std::{coins, Addr, BankMsg, Empty, MessageInfo, OwnedDeps};
+use cosmwasm_std::{coins, Addr, Empty, MessageInfo, OwnedDeps};
 use cw20::MinterResponse;
 use cw20_base::contract::{
     execute as execute_cw20, instantiate as instantiate_cw20, query as query_cw20,
@@ -98,22 +98,21 @@ mod tests {
     use cosmwasm_std::{
         coins, from_binary,
         testing::{mock_env, mock_info},
-        to_binary, Addr, BankMsg, BlockInfo, CosmosMsg, DepsMut, StdError, StdResult, Uint128,
-        WasmMsg,
+        Addr, BankMsg, CosmosMsg, DepsMut, StdError, Uint128,
     };
     use cw20::Cw20ExecuteMsg;
     use cw_controllers::{AdminError, AdminResponse};
     use oraiswap::{
-        asset::{Asset, AssetInfo},
+        asset::AssetInfo,
         cw_multi_test::{BankSudo, Executor, SudoMsg},
     };
 
     use crate::{
         contract::{execute, query, MINIMUM_BLOCK_RANGE},
         msg::{
-            AddNewBalanceMsg, BalancesQuery, DeleteBalanceMappingMsg, ExecuteMsg,
-            QueryBalanceMappingResponse, QueryBalancesMappingResponse, QueryLowBalancesResponse,
-            QueryMsg, TopupBalancesMsg, TopupMsg, UpdateBalanceMsg,
+            AddNewBalanceMsg, DeleteBalanceMappingMsg, ExecuteMsg, QueryBalanceMappingResponse,
+            QueryBalancesMappingResponse, QueryLowBalancesResponse, QueryMsg, TopupBalancesMsg,
+            TopupMsg, UpdateBalanceMsg,
         },
         tests::init_multitest,
         ContractError,
@@ -509,14 +508,47 @@ mod tests {
     fn test_delete_balance_mapping() {
         let mut deps = setup();
         let addr = "addr".to_string();
+
+        // setup, add new balance
+        let balance_info = AssetInfo::Token {
+            contract_addr: Addr::unchecked("contract"),
+        };
+        let second_balance_info = AssetInfo::NativeToken {
+            denom: "orai".to_string(),
+        };
+        let mut add_new_balance_msg = AddNewBalanceMsg {
+            addr: addr.clone(),
+            balance_info: balance_info.clone(),
+            lower_bound: Uint128::from(1u128),
+            upper_bound: Uint128::from(10u128),
+            label: Some("demo_balance".to_string()),
+        };
+        let execute_msg = ExecuteMsg::AddBalance(add_new_balance_msg.clone());
+        let admin = mock_info(&String::from("admin"), &[]);
+        // add new balance mapping first before updating it
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            admin.clone(),
+            execute_msg.clone(),
+        )
+        .unwrap();
+        // Add another balance mapping so we can observe the difference when we update for an existing balance info
+        add_new_balance_msg.balance_info = second_balance_info.clone();
+        let execute_msg = ExecuteMsg::AddBalance(add_new_balance_msg);
+        execute(deps.as_mut(), mock_env(), admin, execute_msg).unwrap();
+
         let execute_msg = ExecuteMsg::DeleteBalanceMapping(DeleteBalanceMappingMsg { addr });
         test_unauthorized_admin(deps.as_mut(), execute_msg.clone());
         let admin = mock_info(&String::from("admin"), &[]);
-        let response = execute(deps.as_mut(), mock_env(), admin, execute_msg).unwrap_err();
-        assert_eq!(
-            response,
-            ContractError::Std(StdError::generic_err("unimplemented"))
-        );
+        execute(deps.as_mut(), mock_env(), admin, execute_msg).unwrap();
+
+        // should return empty
+        let response: QueryBalancesMappingResponse = from_binary(
+            &query(deps.as_ref(), mock_env(), QueryMsg::QueryBalancesMapping {}).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(response.balance_assets.len(), 0usize);
     }
 
     #[test]

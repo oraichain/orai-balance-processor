@@ -178,7 +178,12 @@ pub fn delete_balance_mapping(
     msg: DeleteBalanceMappingMsg,
 ) -> Result<Response, ContractError> {
     ADMIN.assert_admin(deps.as_ref(), &info.sender)?;
-    Err(ContractError::Std(StdError::generic_err("unimplemented")))
+    BALANCE_INFOS.remove(deps.storage, deps.api.addr_validate(&msg.addr)?);
+    let res = Response::new().add_attributes(vec![
+        attr("action", "delete_balance_mapping"),
+        attr("addr", msg.addr),
+    ]);
+    Ok(res)
 }
 
 pub fn topup(deps: DepsMut, env: Env, msg: TopupMsg) -> Result<Response, ContractError> {
