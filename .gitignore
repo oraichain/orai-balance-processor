@@ -16,3 +16,4 @@ Cargo.lock
 
 artifacts
 build
+.env
