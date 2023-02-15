@@ -157,13 +157,8 @@ pub fn update_balance(
                     "lower_bound and upper_bound not set",
                 )));
             }
-
-            if let Some(lower_bound) = msg.lower_bound {
-                asset_data.lower_bound = lower_bound;
-            }
-            if let Some(upper_bound) = msg.upper_bound {
-                asset_data.upper_bound = upper_bound;
-            }
+            asset_data.lower_bound = msg.lower_bound.unwrap_or(asset_data.lower_bound);
+            asset_data.upper_bound = msg.upper_bound.unwrap_or(asset_data.upper_bound);
 
             Ok(balance_info)
         },
