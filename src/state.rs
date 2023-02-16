@@ -17,6 +17,8 @@ pub struct AssetData {
     pub lower_bound: Uint128,
     // upper balance threshold. Will only top-up to this value.
     pub upper_bound: Uint128,
+    // asset decimal
+    pub decimals: u8,
 }
 
 #[cw_serde]

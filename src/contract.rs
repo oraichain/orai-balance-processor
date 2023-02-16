@@ -1,8 +1,8 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    attr, to_binary, Binary, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response, StdError,
-    StdResult,
+    attr, to_binary, Binary, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo, Response,
+    StdError, StdResult, Uint128,
 };
 use oraiswap::asset::Asset;
 // use cw2::set_contract_version;
@@ -116,6 +116,7 @@ pub fn add_balance(
                 asset: msg.balance_info.clone(),
                 lower_bound: msg.lower_bound,
                 upper_bound: msg.upper_bound,
+                decimals: msg.decimals,
             });
 
             Ok(balance_info)
@@ -159,6 +160,7 @@ pub fn update_balance(
             }
             asset_data.lower_bound = msg.lower_bound.unwrap_or(asset_data.lower_bound);
             asset_data.upper_bound = msg.upper_bound.unwrap_or(asset_data.upper_bound);
+            asset_data.decimals = msg.decimals.unwrap_or(asset_data.decimals);
 
             Ok(balance_info)
         },
@@ -213,8 +215,15 @@ pub fn topup(deps: DepsMut, env: Env, msg: TopupMsg) -> Result<Response, Contrac
                 None => continue,
             };
 
-            // if mapped asset is in the mapping list, and its balance is le than the lower bound => include in the list
-            if !current_balance_result.le(&mapped_asset.lower_bound) {
+            // if mapped asset is in the mapping list, and its balance is le than the lower bound => include in the list.
+            // query balance must be divided with decimals
+            if !(current_balance_result
+                * Decimal::from_ratio(
+                    Uint128::from(1u128),
+                    10u128.pow(mapped_asset.decimals.into()),
+                ))
+            .le(&mapped_asset.lower_bound)
+            {
                 continue;
             }
 

@@ -159,6 +159,7 @@ mod tests {
             lower_bound,
             upper_bound,
             label: Some("demo_balance".to_string()),
+            decimals: 6,
         };
         let execute_msg = ExecuteMsg::AddBalance(add_new_balance_msg.clone());
         test_unauthorized_admin(deps.as_mut(), execute_msg.clone());
@@ -222,6 +223,7 @@ mod tests {
             lower_bound,
             upper_bound,
             label: Some("demo_balance".to_string()),
+            decimals: 6,
         };
         let execute_msg = ExecuteMsg::AddBalance(add_new_balance_msg.clone());
         test_unauthorized_admin(deps.as_mut(), execute_msg.clone());
@@ -293,6 +295,7 @@ mod tests {
                 lower_bound: Uint128::from(11u128), // current balance is 10u128, should trigger low balance
                 upper_bound: Uint128::from(100u128),
                 label: Some("demo_balance".to_string()),
+                decimals: 6,
             }),
             &vec![],
         )
@@ -310,6 +313,7 @@ mod tests {
                 lower_bound: Uint128::from(11u128), // current balance is 10u128, should trigger low balance
                 upper_bound: Uint128::from(1000u128),
                 label: Some("demo_balance".to_string()),
+                decimals: 6,
             }),
             &vec![],
         )
@@ -370,6 +374,7 @@ mod tests {
             lower_bound,
             upper_bound,
             label: Some("demo_balance".to_string()),
+            decimals: 6,
         };
         let execute_msg = ExecuteMsg::AddBalance(add_new_balance_msg.clone());
 
@@ -439,6 +444,7 @@ mod tests {
             lower_bound: Uint128::from(1u128),
             upper_bound: Uint128::from(10u128),
             label: Some("demo_balance".to_string()),
+            decimals: 6,
         };
         let execute_msg = ExecuteMsg::AddBalance(add_new_balance_msg.clone());
         let admin = mock_info(&String::from("admin"), &[]);
@@ -461,6 +467,7 @@ mod tests {
             balance_info: balance_info.clone(),
             lower_bound: Some(lower_bound),
             upper_bound: Some(upper_bound),
+            decimals: Some(18),
         });
         test_unauthorized_admin(deps.as_mut(), execute_msg.clone());
         let admin = mock_info(&String::from("admin"), &[]);
@@ -477,6 +484,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(response.assets[0].lower_bound, lower_bound); // asset info {"contract_addr":"contract"} lower bound & upper bound should be updated
+        assert_eq!(response.assets[0].decimals, 18); // asset info {"contract_addr":"contract"} lower bound & upper bound, decimals should be updated
 
         // balance mapping not exist case
         // now we try to update the balance to new lower & upper bound
@@ -485,6 +493,7 @@ mod tests {
             balance_info: balance_info.clone(),
             lower_bound: Some(lower_bound),
             upper_bound: Some(upper_bound),
+            decimals: None,
         });
         let admin = mock_info(&String::from("admin"), &[]);
         let response_err = execute(deps.as_mut(), mock_env(), admin, execute_msg).unwrap_err();
@@ -498,6 +507,7 @@ mod tests {
             },
             lower_bound: Some(lower_bound),
             upper_bound: Some(upper_bound),
+            decimals: None,
         });
         let admin = mock_info(&String::from("admin"), &[]);
         let response_err = execute(deps.as_mut(), mock_env(), admin, execute_msg).unwrap_err();
@@ -522,6 +532,7 @@ mod tests {
             lower_bound: Uint128::from(1u128),
             upper_bound: Uint128::from(10u128),
             label: Some("demo_balance".to_string()),
+            decimals: 6,
         };
         let execute_msg = ExecuteMsg::AddBalance(add_new_balance_msg.clone());
         let admin = mock_info(&String::from("admin"), &[]);
@@ -595,6 +606,7 @@ mod tests {
                 lower_bound: Uint128::from(11u128), // current balance is 10u128, should trigger low balance
                 upper_bound: native_balance_info_upper_bound.clone(),
                 label: Some("demo_balance".to_string()),
+                decimals: 0,
             }),
             &vec![],
         )
@@ -612,6 +624,7 @@ mod tests {
                 lower_bound: Uint128::from(11u128), // current balance is 10u128, should trigger low balance
                 upper_bound: Uint128::from(1000u128),
                 label: Some("demo_balance".to_string()),
+                decimals: 0,
             }),
             &vec![],
         )
