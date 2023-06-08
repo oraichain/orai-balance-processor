@@ -1,6 +1,5 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::{Addr, Uint128};
-use cw_controllers::AdminResponse;
 use oraiswap::asset::{Asset, AssetInfo};
 
 use crate::state::AssetData;
@@ -11,27 +10,17 @@ pub struct InstantiateMsg {}
 #[cw_serde]
 pub enum ExecuteMsg {
     /// Append / add new balance array element for a given asset info
-    AddBalance(AddNewBalanceMsg),
+    AddBalance(AddNewBalanceMappingMsg),
     /// Update an existing balance array element for a given asset info
-    UpdateBalance(UpdateBalanceMsg),
+    UpdateBalance(UpdateBalanceMappingMsg),
     /// Delete a balance mapping meaning removing the asset info in the mapping
     DeleteBalanceMapping(DeleteBalanceMappingMsg),
-    /// Topup low balances if needed
-    Topup(TopupMsg),
     /// Update new admin
-    UpdateAdmin {
-        new_admin: String,
-    },
-    UpdateConfig(UpdateConfigMsg),
+    UpdateAdmin { new_admin: String },
 }
 
 #[cw_serde]
-pub struct UpdateConfigMsg {
-    pub minimum_block_range: Option<u64>,
-}
-
-#[cw_serde]
-pub struct AddNewBalanceMsg {
+pub struct AddNewBalanceMappingMsg {
     pub addr: String,
     pub balance_info: AssetInfo,
     pub lower_bound: Uint128,
@@ -41,7 +30,7 @@ pub struct AddNewBalanceMsg {
 }
 
 #[cw_serde]
-pub struct UpdateBalanceMsg {
+pub struct UpdateBalanceMappingMsg {
     pub addr: String,
     pub balance_info: AssetInfo,
     pub lower_bound: Option<Uint128>,
@@ -52,11 +41,6 @@ pub struct UpdateBalanceMsg {
 #[cw_serde]
 pub struct DeleteBalanceMappingMsg {
     pub addr: String,
-}
-
-#[cw_serde]
-pub struct TopupMsg {
-    pub balances: Vec<TopupBalancesMsg>,
 }
 
 #[cw_serde]
@@ -71,7 +55,7 @@ pub enum QueryMsg {
     /// Query a balance mapping given an asset info
     #[returns(QueryBalanceMappingResponse)]
     QueryBalanceMapping { addr: String },
-    #[returns(AdminResponse)]
+    #[returns(cw_controllers::AdminResponse)]
     QueryAdmin {},
 }
 
@@ -108,17 +92,4 @@ pub struct BalancesQuery {
     pub addr: Addr,
     pub label: String,
     pub assets: Vec<Asset>,
-}
-
-#[cw_serde]
-pub struct TopupBalancesMsg {
-    pub addr: Addr,
-    pub asset_infos: Vec<AssetInfo>,
-}
-
-/// This struct is solely used to verify if there's a top-up msg for a given addr & asset info or not
-#[cw_serde]
-pub struct TopupSanityCheck {
-    pub addr: Addr,
-    pub asset_info: AssetInfo,
 }

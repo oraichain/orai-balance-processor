@@ -98,21 +98,18 @@ mod tests {
     use cosmwasm_std::{
         coins, from_binary,
         testing::{mock_env, mock_info},
-        Addr, BankMsg, CosmosMsg, DepsMut, StdError, Uint128,
+        Addr, BankMsg, DepsMut, StdError, Uint128,
     };
     use cw20::Cw20ExecuteMsg;
     use cw_controllers::{AdminError, AdminResponse};
-    use oraiswap::{
-        asset::AssetInfo,
-        cw_multi_test::{BankSudo, Executor, SudoMsg},
-    };
+    use oraiswap::{asset::AssetInfo, cw_multi_test::Executor};
 
     use crate::{
-        contract::{execute, query, MINIMUM_BLOCK_RANGE},
+        contract::{execute, query},
         msg::{
-            AddNewBalanceMsg, DeleteBalanceMappingMsg, ExecuteMsg, QueryBalanceMappingResponse,
-            QueryBalancesMappingResponse, QueryLowBalancesResponse, QueryMsg, TopupBalancesMsg,
-            TopupMsg, UpdateBalanceMsg,
+            AddNewBalanceMappingMsg, DeleteBalanceMappingMsg, ExecuteMsg,
+            QueryBalanceMappingResponse, QueryBalancesMappingResponse, QueryLowBalancesResponse,
+            QueryMsg, UpdateBalanceMappingMsg,
         },
         tests::init_multitest,
         ContractError,
@@ -153,7 +150,7 @@ mod tests {
         };
         let lower_bound = Uint128::from(50000u128);
         let upper_bound = Uint128::from(100000u128);
-        let mut add_new_balance_msg = AddNewBalanceMsg {
+        let mut add_new_balance_msg = AddNewBalanceMappingMsg {
             addr: addr.clone(),
             balance_info: balance_info.clone(),
             lower_bound,
@@ -217,7 +214,7 @@ mod tests {
         };
         let lower_bound = Uint128::from(50000u128);
         let upper_bound = Uint128::from(100000u128);
-        let add_new_balance_msg = AddNewBalanceMsg {
+        let add_new_balance_msg = AddNewBalanceMappingMsg {
             addr: addr.clone(),
             balance_info: balance_info.clone(),
             lower_bound,
@@ -287,7 +284,7 @@ mod tests {
         deps.execute_contract(
             admin_addr.clone(),
             addr.clone(),
-            &ExecuteMsg::AddBalance(AddNewBalanceMsg {
+            &ExecuteMsg::AddBalance(AddNewBalanceMappingMsg {
                 addr: mock_addr.sender.to_string(),
                 balance_info: AssetInfo::NativeToken {
                     denom: native_balance_info_denom.clone(),
@@ -305,7 +302,7 @@ mod tests {
         deps.execute_contract(
             admin_addr.clone(),
             addr.clone(),
-            &ExecuteMsg::AddBalance(AddNewBalanceMsg {
+            &ExecuteMsg::AddBalance(AddNewBalanceMappingMsg {
                 addr: mock_addr.sender.to_string(),
                 balance_info: AssetInfo::Token {
                     contract_addr: Addr::unchecked(&cw20_balance_info_address.clone()),
@@ -368,7 +365,7 @@ mod tests {
         };
         let lower_bound = Uint128::from(50000u128);
         let upper_bound = Uint128::from(100000u128);
-        let mut add_new_balance_msg = AddNewBalanceMsg {
+        let mut add_new_balance_msg = AddNewBalanceMappingMsg {
             addr: addr.clone(),
             balance_info: balance_info.clone(),
             lower_bound,
@@ -438,7 +435,7 @@ mod tests {
         };
         let lower_bound = Uint128::from(50000u128);
         let upper_bound = Uint128::from(100000u128);
-        let mut add_new_balance_msg = AddNewBalanceMsg {
+        let mut add_new_balance_msg = AddNewBalanceMappingMsg {
             addr: addr.clone(),
             balance_info: balance_info.clone(),
             lower_bound: Uint128::from(1u128),
@@ -462,7 +459,7 @@ mod tests {
         execute(deps.as_mut(), mock_env(), admin, execute_msg).unwrap();
 
         // now we try to update the balance to new lower & upper bound
-        let execute_msg = ExecuteMsg::UpdateBalance(UpdateBalanceMsg {
+        let execute_msg = ExecuteMsg::UpdateBalance(UpdateBalanceMappingMsg {
             addr: addr.clone(),
             balance_info: balance_info.clone(),
             lower_bound: Some(lower_bound),
@@ -488,7 +485,7 @@ mod tests {
 
         // balance mapping not exist case
         // now we try to update the balance to new lower & upper bound
-        let execute_msg = ExecuteMsg::UpdateBalance(UpdateBalanceMsg {
+        let execute_msg = ExecuteMsg::UpdateBalance(UpdateBalanceMappingMsg {
             addr: "not-exist".to_string(),
             balance_info: balance_info.clone(),
             lower_bound: Some(lower_bound),
@@ -500,7 +497,7 @@ mod tests {
         assert_eq!(response_err, ContractError::BalanceMappingNotExist {});
 
         // Balance info not exist case
-        let execute_msg = ExecuteMsg::UpdateBalance(UpdateBalanceMsg {
+        let execute_msg = ExecuteMsg::UpdateBalance(UpdateBalanceMappingMsg {
             addr: addr.clone(),
             balance_info: AssetInfo::Token {
                 contract_addr: Addr::unchecked("not-exist"),
@@ -526,7 +523,7 @@ mod tests {
         let second_balance_info = AssetInfo::NativeToken {
             denom: "orai".to_string(),
         };
-        let mut add_new_balance_msg = AddNewBalanceMsg {
+        let mut add_new_balance_msg = AddNewBalanceMappingMsg {
             addr: addr.clone(),
             balance_info: balance_info.clone(),
             lower_bound: Uint128::from(1u128),
@@ -560,205 +557,5 @@ mod tests {
         )
         .unwrap();
         assert_eq!(response.balance_assets.len(), 0usize);
-    }
-
-    #[test]
-    fn test_topup() {
-        let (mut deps, addr, cw20_addr, admin) = init_multitest();
-        let mock_addr = mock_info("sender", &vec![]);
-        let native_balance_info_denom = "orai".to_string();
-        let cw20_balance_info_address = cw20_addr.to_string();
-        let admin_addr = admin.sender;
-        let native_balance_info_upper_bound = Uint128::from(100u128);
-        // init msgs to send the admin addr some cw20 & native tokens
-        deps.execute(
-            addr.clone(),
-            BankMsg::Send {
-                to_address: mock_addr.sender.to_string(),
-                amount: coins(10u128, native_balance_info_denom.clone()),
-            }
-            .into(),
-        )
-        .unwrap();
-
-        // mint new cw20 addr to mock addr
-        deps.execute_contract(
-            admin_addr.clone(),
-            cw20_addr.clone(),
-            &Cw20ExecuteMsg::Mint {
-                recipient: mock_addr.sender.to_string(),
-                amount: Uint128::from(100u128),
-            },
-            &vec![],
-        )
-        .unwrap();
-
-        // store two balance infos above into the balance mapping to try querying low balances
-        // store native balance info orai
-        deps.execute_contract(
-            admin_addr.clone(),
-            addr.clone(),
-            &ExecuteMsg::AddBalance(AddNewBalanceMsg {
-                addr: mock_addr.sender.to_string(),
-                balance_info: AssetInfo::NativeToken {
-                    denom: native_balance_info_denom.clone(),
-                },
-                lower_bound: Uint128::from(11u128), // current balance is 10u128, should trigger low balance
-                upper_bound: native_balance_info_upper_bound.clone(),
-                label: Some("demo_balance".to_string()),
-                decimals: 0,
-            }),
-            &vec![],
-        )
-        .unwrap();
-
-        // store cw20 balance
-        deps.execute_contract(
-            admin_addr.clone(),
-            addr.clone(),
-            &ExecuteMsg::AddBalance(AddNewBalanceMsg {
-                addr: mock_addr.sender.to_string(),
-                balance_info: AssetInfo::Token {
-                    contract_addr: Addr::unchecked(&cw20_balance_info_address.clone()),
-                },
-                lower_bound: Uint128::from(11u128), // current balance is 10u128, should trigger low balance
-                upper_bound: Uint128::from(1000u128),
-                label: Some("demo_balance".to_string()),
-                decimals: 0,
-            }),
-            &vec![],
-        )
-        .unwrap();
-
-        // mint new not-in-list-denom to mock addr, this would help pass the non-existed error
-        deps.sudo(SudoMsg::Bank(BankSudo::Mint {
-            to_address: admin_addr.to_string(),
-            amount: coins(1u128, "not-in-list-denom"),
-        }))
-        .unwrap();
-
-        // before top-up, orai denom is in low balance for mock addr
-        let response: QueryLowBalancesResponse = deps
-            .wrap()
-            .query_wasm_smart(addr.to_string(), &QueryMsg::QueryLowBalances {})
-            .unwrap();
-        assert_eq!(response.low_balance_assets.len(), 1usize);
-        assert_eq!(
-            response.low_balance_assets[0].assets[0].info,
-            AssetInfo::NativeToken {
-                denom: native_balance_info_denom.to_string()
-            }
-        );
-
-        let balances = vec![
-            // non existed denom case
-            // top up msg includes wrong asset case, should not top-up because the asset is not in the list
-            TopupBalancesMsg {
-                addr: mock_addr.sender.clone(),
-                asset_infos: vec![AssetInfo::NativeToken {
-                    denom: "non-existed".to_string(),
-                }],
-            },
-            // not in the list of balance mapping case
-            TopupBalancesMsg {
-                addr: mock_addr.sender.clone(),
-                asset_infos: vec![AssetInfo::NativeToken {
-                    denom: "not-in-list-denom".to_string(),
-                }],
-            },
-            // balance is not below lower bound
-            TopupBalancesMsg {
-                addr: mock_addr.sender.clone(),
-                asset_infos: vec![AssetInfo::Token {
-                    contract_addr: cw20_addr.clone(),
-                }],
-            },
-            // correct case which is orai low balance, should top up
-            TopupBalancesMsg {
-                addr: mock_addr.sender.clone(),
-                asset_infos: vec![
-                    AssetInfo::NativeToken {
-                        denom: native_balance_info_denom.to_string(),
-                    },
-                    // multiple same asset info in a topup balance msg wont work, will only mark as one topup msg
-                    AssetInfo::NativeToken {
-                        denom: native_balance_info_denom.to_string(),
-                    },
-                    AssetInfo::NativeToken {
-                        denom: native_balance_info_denom.to_string(),
-                    },
-                    AssetInfo::NativeToken {
-                        denom: native_balance_info_denom.to_string(),
-                    },
-                ],
-            },
-            // multiple topup balance msg with same addr & asset info wont work, will only mark as one topup msg
-            TopupBalancesMsg {
-                addr: mock_addr.sender.clone(),
-                asset_infos: vec![AssetInfo::NativeToken {
-                    denom: native_balance_info_denom.to_string(),
-                }],
-            },
-        ];
-        let execute_msg = ExecuteMsg::Topup(TopupMsg { balances });
-        let admin = mock_info(&String::from("admin"), &[]);
-        let response = deps
-            .execute_contract(
-                admin.sender.clone(),
-                addr.clone(),
-                &execute_msg.clone(),
-                &vec![],
-            )
-            .unwrap();
-        assert_eq!(response.events[1].attributes.last().unwrap().value, "1");
-        assert_eq!(response.events[1].attributes[2].value, "true");
-
-        // after topping up, should not have any low balance
-        let response: QueryLowBalancesResponse = deps
-            .wrap()
-            .query_wasm_smart(addr.to_string(), &QueryMsg::QueryLowBalances {})
-            .unwrap();
-        assert_eq!(response.low_balance_assets.len(), 0usize);
-
-        // wallet hack case. Asset is drained, and hacker will call multiple top-up txs in a short period. Should reject & only allow top-up once per day for an asset
-        // pretend that the mock addr is hacked & sent all top-up tokens back to contract
-        deps.execute(
-            mock_addr.sender.clone(),
-            CosmosMsg::Bank(BankMsg::Send {
-                to_address: addr.to_string(),
-                amount: coins(
-                    native_balance_info_upper_bound.u128(),
-                    native_balance_info_denom.clone(),
-                ),
-            }),
-        )
-        .unwrap();
-        // now we try to top-up again immediately afterwards => should fail
-        let response = deps
-            .execute_contract(
-                admin.sender.clone(),
-                addr.clone(),
-                &execute_msg.clone(),
-                &vec![],
-            )
-            .unwrap();
-        assert_eq!(response.events[1].attributes.last().unwrap().value, "0");
-        assert_eq!(response.events[1].attributes[2].value, "true");
-
-        // we need to wait for at least a day to re-topup
-        let mut block_info = deps.block_info();
-        block_info.height += MINIMUM_BLOCK_RANGE + 1;
-        deps.set_block(block_info);
-
-        // now we can top-up
-        let response = deps
-            .execute_contract(
-                admin.sender.clone(),
-                addr.clone(),
-                &execute_msg.clone(),
-                &vec![],
-            )
-            .unwrap();
-        assert_eq!(response.events[1].attributes.last().unwrap().value, "1");
     }
 }
