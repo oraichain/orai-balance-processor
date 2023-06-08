@@ -1,7 +1,10 @@
+use std::ops::Mul;
+
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
     attr, to_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdError, StdResult,
+    Uint128,
 };
 use oraiswap::asset::Asset;
 // use cw2::set_contract_version;
@@ -213,7 +216,10 @@ pub fn query_low_balances(deps: Deps) -> StdResult<QueryLowBalancesResponse> {
             let result = query_balance(deps, element.addr.as_str(), &inner_element.asset)?;
 
             // only save into the list of balance query if balance amount is below the lower bound
-            if result.le(&inner_element.lower_bound) {
+            if result
+                .mul(Uint128::from(10u64.pow(inner_element.decimals as u32)))
+                .le(&inner_element.lower_bound)
+            {
                 balance_query.assets.push(Asset {
                     info: inner_element.asset,
                     amount: result,

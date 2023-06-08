@@ -285,7 +285,7 @@ mod tests {
                 balance_info: AssetInfo::NativeToken {
                     denom: native_balance_info_denom.clone(),
                 },
-                lower_bound: Uint128::from(11u128), // current balance is 10u128, should trigger low balance
+                lower_bound: Uint128::from(11000000u128), // current balance is 10u128, should trigger low balance
                 label: Some("demo_balance".to_string()),
                 decimals: 6,
             }),
@@ -302,7 +302,7 @@ mod tests {
                 balance_info: AssetInfo::Token {
                     contract_addr: Addr::unchecked(&cw20_balance_info_address.clone()),
                 },
-                lower_bound: Uint128::from(11u128), // current balance is 10u128, should trigger low balance
+                lower_bound: Uint128::from(11000000u128), // current balance is 10u128, should trigger low balance
                 label: Some("demo_balance".to_string()),
                 decimals: 6,
             }),
