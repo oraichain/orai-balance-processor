@@ -94,7 +94,6 @@ pub fn add_balance(
         attr("addr", msg.addr),
         attr("balance_info", msg.balance_info.to_string()),
         attr("lower_bound", msg.lower_bound),
-        attr("upper_bound", msg.upper_bound),
     ]);
     Ok(res)
 }
@@ -119,7 +118,7 @@ pub fn update_balance(
                 .find(|a| a.asset.eq(&msg.balance_info))
                 .ok_or(ContractError::BalanceInfoNotExist {})?;
 
-            if msg.lower_bound.is_none() || msg.upper_bound.is_none() {
+            if msg.lower_bound.is_none() {
                 return Err(ContractError::Std(StdError::generic_err(
                     "lower_bound and upper_bound not set",
                 )));

@@ -24,7 +24,6 @@ pub struct AddNewBalanceMappingMsg {
     pub addr: String,
     pub balance_info: AssetInfo,
     pub lower_bound: Uint128,
-    pub upper_bound: Uint128,
     pub decimals: u8,
     pub label: Option<String>,
 }
@@ -34,7 +33,6 @@ pub struct UpdateBalanceMappingMsg {
     pub addr: String,
     pub balance_info: AssetInfo,
     pub lower_bound: Option<Uint128>,
-    pub upper_bound: Option<Uint128>,
     pub decimals: Option<u8>,
 }
 

@@ -149,12 +149,10 @@ mod tests {
             contract_addr: Addr::unchecked("contract"),
         };
         let lower_bound = Uint128::from(50000u128);
-        let upper_bound = Uint128::from(100000u128);
         let mut add_new_balance_msg = AddNewBalanceMappingMsg {
             addr: addr.clone(),
             balance_info: balance_info.clone(),
             lower_bound,
-            upper_bound,
             label: Some("demo_balance".to_string()),
             decimals: 6,
         };
@@ -213,12 +211,10 @@ mod tests {
             contract_addr: Addr::unchecked("contract"),
         };
         let lower_bound = Uint128::from(50000u128);
-        let upper_bound = Uint128::from(100000u128);
         let add_new_balance_msg = AddNewBalanceMappingMsg {
             addr: addr.clone(),
             balance_info: balance_info.clone(),
             lower_bound,
-            upper_bound,
             label: Some("demo_balance".to_string()),
             decimals: 6,
         };
@@ -290,7 +286,6 @@ mod tests {
                     denom: native_balance_info_denom.clone(),
                 },
                 lower_bound: Uint128::from(11u128), // current balance is 10u128, should trigger low balance
-                upper_bound: Uint128::from(100u128),
                 label: Some("demo_balance".to_string()),
                 decimals: 6,
             }),
@@ -308,7 +303,6 @@ mod tests {
                     contract_addr: Addr::unchecked(&cw20_balance_info_address.clone()),
                 },
                 lower_bound: Uint128::from(11u128), // current balance is 10u128, should trigger low balance
-                upper_bound: Uint128::from(1000u128),
                 label: Some("demo_balance".to_string()),
                 decimals: 6,
             }),
@@ -364,12 +358,10 @@ mod tests {
             denom: "orai".to_string(),
         };
         let lower_bound = Uint128::from(50000u128);
-        let upper_bound = Uint128::from(100000u128);
         let mut add_new_balance_msg = AddNewBalanceMappingMsg {
             addr: addr.clone(),
             balance_info: balance_info.clone(),
             lower_bound,
-            upper_bound,
             label: Some("demo_balance".to_string()),
             decimals: 6,
         };
@@ -434,12 +426,10 @@ mod tests {
             denom: "orai".to_string(),
         };
         let lower_bound = Uint128::from(50000u128);
-        let upper_bound = Uint128::from(100000u128);
         let mut add_new_balance_msg = AddNewBalanceMappingMsg {
             addr: addr.clone(),
             balance_info: balance_info.clone(),
             lower_bound: Uint128::from(1u128),
-            upper_bound: Uint128::from(10u128),
             label: Some("demo_balance".to_string()),
             decimals: 6,
         };
@@ -463,7 +453,6 @@ mod tests {
             addr: addr.clone(),
             balance_info: balance_info.clone(),
             lower_bound: Some(lower_bound),
-            upper_bound: Some(upper_bound),
             decimals: Some(18),
         });
         test_unauthorized_admin(deps.as_mut(), execute_msg.clone());
@@ -489,7 +478,6 @@ mod tests {
             addr: "not-exist".to_string(),
             balance_info: balance_info.clone(),
             lower_bound: Some(lower_bound),
-            upper_bound: Some(upper_bound),
             decimals: None,
         });
         let admin = mock_info(&String::from("admin"), &[]);
@@ -503,7 +491,6 @@ mod tests {
                 contract_addr: Addr::unchecked("not-exist"),
             },
             lower_bound: Some(lower_bound),
-            upper_bound: Some(upper_bound),
             decimals: None,
         });
         let admin = mock_info(&String::from("admin"), &[]);
@@ -527,7 +514,6 @@ mod tests {
             addr: addr.clone(),
             balance_info: balance_info.clone(),
             lower_bound: Uint128::from(1u128),
-            upper_bound: Uint128::from(10u128),
             label: Some("demo_balance".to_string()),
             decimals: 6,
         };
