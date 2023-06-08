@@ -82,7 +82,6 @@ pub fn add_balance(
             balance_info.balances.push(AssetData {
                 asset: msg.balance_info.clone(),
                 lower_bound: msg.lower_bound,
-                upper_bound: msg.upper_bound,
                 decimals: msg.decimals,
             });
 
@@ -126,7 +125,6 @@ pub fn update_balance(
                 )));
             }
             asset_data.lower_bound = msg.lower_bound.unwrap_or(asset_data.lower_bound);
-            asset_data.upper_bound = msg.upper_bound.unwrap_or(asset_data.upper_bound);
             asset_data.decimals = msg.decimals.unwrap_or(asset_data.decimals);
 
             Ok(balance_info)

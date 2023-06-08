@@ -15,8 +15,6 @@ pub struct AssetData {
     pub asset: AssetInfo,
     // lower balance threshold. Should top-up if actual balance lower.
     pub lower_bound: Uint128,
-    // upper balance threshold. Will only top-up to this value.
-    pub upper_bound: Uint128,
     // asset decimal
     pub decimals: u8,
 }
