@@ -13,8 +13,8 @@ use crate::error::ContractError;
 use crate::helpers::query_balance;
 use crate::msg::{
     AddNewBalanceMappingMsg, BalancesMappingQuery, BalancesQuery, DeleteBalanceMappingMsg,
-    ExecuteMsg, InstantiateMsg, QueryBalanceMappingResponse, QueryBalancesMappingResponse,
-    QueryLowBalancesResponse, QueryMsg, UpdateBalanceMappingMsg,
+    ExecuteMsg, InstantiateMsg, MigrateMsg, QueryBalanceMappingResponse,
+    QueryBalancesMappingResponse, QueryLowBalancesResponse, QueryMsg, UpdateBalanceMappingMsg,
 };
 use crate::state::{AssetData, BalanceInfo, ADMIN, BALANCE_INFOS};
 
@@ -163,6 +163,11 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
         QueryMsg::QueryBalancesMapping {} => to_binary(&query_balances_mapping(deps)?),
         QueryMsg::QueryLowBalances {} => to_binary(&query_low_balances(deps)?),
     }
+}
+
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> StdResult<Response> {
+    Ok(Response::default())
 }
 
 pub fn query_balance_mapping(deps: Deps, addr: String) -> StdResult<QueryBalanceMappingResponse> {

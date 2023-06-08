@@ -8,6 +8,9 @@ use crate::state::AssetData;
 pub struct InstantiateMsg {}
 
 #[cw_serde]
+pub struct MigrateMsg {}
+
+#[cw_serde]
 pub enum ExecuteMsg {
     /// Append / add new balance array element for a given asset info
     AddBalance(AddNewBalanceMappingMsg),
