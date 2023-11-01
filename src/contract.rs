@@ -115,7 +115,7 @@ pub fn update_balance(
         addr,
         |balance_info| -> Result<BalanceInfo, ContractError> {
             let mut balance_info = balance_info.ok_or(ContractError::BalanceMappingNotExist {})?;
-            let mut asset_data = balance_info
+            let asset_data = balance_info
                 .balances
                 .iter_mut()
                 .find(|a| a.asset.eq(&msg.balance_info))
