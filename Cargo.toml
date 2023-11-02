@@ -36,4 +36,3 @@ cw-controllers = "1.0.1"
 
 [dev-dependencies]
 cosmwasm-storage = { version = "1.1.9" }
-oraiswap-token = { path = "../oraiswap/contracts/oraiswap_token" }
