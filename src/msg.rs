@@ -71,6 +71,11 @@ pub enum QueryMsg {
     QueryBalanceMapping { addr: String },
     #[returns(cw_controllers::AdminResponse)]
     QueryAdmin {},
+    #[returns(AllCurrentBalancesQueryResponse)]
+    QueryAllCurrentBalances {
+        limit: Option<u8>,
+        next: Option<String>,
+    },
 }
 
 #[cw_serde]
@@ -106,4 +111,9 @@ pub struct BalancesQuery {
     pub addr: Addr,
     pub label: String,
     pub assets: Vec<Asset>,
+}
+
+#[cw_serde]
+pub struct AllCurrentBalancesQueryResponse {
+    pub balance_assets: Vec<BalancesQuery>,
 }

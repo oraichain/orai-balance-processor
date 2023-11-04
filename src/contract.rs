@@ -7,13 +7,14 @@ use cosmwasm_std::{
     Uint128,
 };
 use cw2::set_contract_version;
+use cw_storage_plus::Bound;
 use oraiswap::asset::Asset;
 
 use crate::error::ContractError;
 use crate::helpers::query_balance;
 use crate::msg::{
-    AddNewBalanceMappingMsg, BalancesMappingQuery, BalancesQuery, DeleteBalanceMappingMsg,
-    ExecuteMsg, InstantiateMsg, MigrateMsg, QueryBalanceMappingResponse,
+    AddNewBalanceMappingMsg, AllCurrentBalancesQueryResponse, BalancesMappingQuery, BalancesQuery,
+    DeleteBalanceMappingMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryBalanceMappingResponse,
     QueryBalancesMappingResponse, QueryLowBalancesResponse, QueryMsg, UpdateBalanceMappingMsg,
 };
 use crate::state::{AssetData, BalanceInfo, ADMIN, BALANCE_INFOS};
@@ -161,6 +162,9 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
         QueryMsg::QueryBalanceMapping { addr } => to_binary(&query_balance_mapping(deps, addr)?),
         QueryMsg::QueryBalancesMapping {} => to_binary(&query_balances_mapping(deps)?),
         QueryMsg::QueryLowBalances {} => to_binary(&query_low_balances(deps)?),
+        QueryMsg::QueryAllCurrentBalances { limit, next } => {
+            to_binary(&query_all_current_balances(deps, limit, next)?)
+        }
     }
 }
 
@@ -218,8 +222,6 @@ pub fn query_low_balances(deps: Deps) -> StdResult<QueryLowBalancesResponse> {
         };
         for inner_element in element.assets {
             let result = query_balance(deps, element.addr.as_str(), &inner_element.asset)?;
-            deps.api.debug(&format!("result {:?}", result));
-
             // only save into the list of balance query if balance amount is below the lower bound
             if inner_element
                 .lower_bound
@@ -239,4 +241,40 @@ pub fn query_low_balances(deps: Deps) -> StdResult<QueryLowBalancesResponse> {
         }
     }
     Ok(QueryLowBalancesResponse { low_balance_assets })
+}
+
+pub fn query_all_current_balances(
+    deps: Deps,
+    limit: Option<u8>,
+    next: Option<String>,
+) -> StdResult<AllCurrentBalancesQueryResponse> {
+    let next = match next {
+        Some(key) => Some(Bound::exclusive(deps.api.addr_validate(&key)?)),
+        None => None,
+    };
+
+    let balances: Vec<BalancesQuery> = BALANCE_INFOS
+        .range(deps.storage, next, None, cosmwasm_std::Order::Ascending)
+        .take(limit.unwrap_or(30) as usize)
+        .map(|tuple| {
+            let (k, v) = tuple?;
+            let mut assets: Vec<Asset> = vec![];
+            for asset_data in v.balances {
+                let result = query_balance(deps, k.as_str(), &asset_data.asset)?;
+                assets.push(Asset {
+                    info: asset_data.asset,
+                    amount: result,
+                });
+            }
+            Ok(BalancesQuery {
+                addr: k,
+                label: v.label,
+                assets,
+            })
+        })
+        .collect::<StdResult<_>>()?;
+
+    Ok(AllCurrentBalancesQueryResponse {
+        balance_assets: balances,
+    })
 }
