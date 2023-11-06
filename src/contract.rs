@@ -230,7 +230,9 @@ pub fn query_low_balances(deps: Deps) -> StdResult<QueryLowBalancesResponse> {
             {
                 balance_query.assets.push(Asset {
                     info: inner_element.asset,
-                    amount: result,
+                    amount: result
+                        .checked_div(Uint128::from(10u64.pow(inner_element.decimals as u32)))
+                        .unwrap_or_default(),
                 });
             }
         }
@@ -263,7 +265,9 @@ pub fn query_all_current_balances(
                 let result = query_balance(deps, k.as_str(), &asset_data.asset)?;
                 assets.push(Asset {
                     info: asset_data.asset,
-                    amount: result,
+                    amount: result
+                        .checked_div(Uint128::from(10u64.pow(asset_data.decimals as u32)))
+                        .unwrap_or_default(),
                 });
             }
             Ok(BalancesQuery {
