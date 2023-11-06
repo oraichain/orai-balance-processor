@@ -6,23 +6,22 @@ use cosmwasm_std::{
     attr, to_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdError, StdResult,
     Uint128,
 };
+use cw2::set_contract_version;
+use cw_storage_plus::Bound;
 use oraiswap::asset::Asset;
-// use cw2::set_contract_version;
 
 use crate::error::ContractError;
 use crate::helpers::query_balance;
 use crate::msg::{
-    AddNewBalanceMappingMsg, BalancesMappingQuery, BalancesQuery, DeleteBalanceMappingMsg,
-    ExecuteMsg, InstantiateMsg, MigrateMsg, QueryBalanceMappingResponse,
+    AddNewBalanceMappingMsg, AllCurrentBalancesQueryResponse, BalancesMappingQuery, BalancesQuery,
+    DeleteBalanceMappingMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryBalanceMappingResponse,
     QueryBalancesMappingResponse, QueryLowBalancesResponse, QueryMsg, UpdateBalanceMappingMsg,
 };
 use crate::state::{AssetData, BalanceInfo, ADMIN, BALANCE_INFOS};
 
-/*
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:orai-balance-processor";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
-*/
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -32,6 +31,7 @@ pub fn instantiate(
     _msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
     ADMIN.set(deps.branch(), Some(info.sender.clone()))?;
+    set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
     Ok(Response::new().add_attribute("admin", info.sender.to_string()))
 }
@@ -162,6 +162,9 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
         QueryMsg::QueryBalanceMapping { addr } => to_binary(&query_balance_mapping(deps, addr)?),
         QueryMsg::QueryBalancesMapping {} => to_binary(&query_balances_mapping(deps)?),
         QueryMsg::QueryLowBalances {} => to_binary(&query_low_balances(deps)?),
+        QueryMsg::QueryAllCurrentBalances { limit, next } => {
+            to_binary(&query_all_current_balances(deps, limit, next)?)
+        }
     }
 }
 
@@ -219,15 +222,17 @@ pub fn query_low_balances(deps: Deps) -> StdResult<QueryLowBalancesResponse> {
         };
         for inner_element in element.assets {
             let result = query_balance(deps, element.addr.as_str(), &inner_element.asset)?;
-
             // only save into the list of balance query if balance amount is below the lower bound
-            if result
+            if inner_element
+                .lower_bound
                 .mul(Uint128::from(10u64.pow(inner_element.decimals as u32)))
-                .le(&inner_element.lower_bound)
+                .ge(&result)
             {
                 balance_query.assets.push(Asset {
                     info: inner_element.asset,
-                    amount: result,
+                    amount: result
+                        .checked_div(Uint128::from(10u64.pow(inner_element.decimals as u32)))
+                        .unwrap_or_default(),
                 });
             }
         }
@@ -238,4 +243,42 @@ pub fn query_low_balances(deps: Deps) -> StdResult<QueryLowBalancesResponse> {
         }
     }
     Ok(QueryLowBalancesResponse { low_balance_assets })
+}
+
+pub fn query_all_current_balances(
+    deps: Deps,
+    limit: Option<u8>,
+    next: Option<String>,
+) -> StdResult<AllCurrentBalancesQueryResponse> {
+    let next = match next {
+        Some(key) => Some(Bound::exclusive(deps.api.addr_validate(&key)?)),
+        None => None,
+    };
+
+    let balances: Vec<BalancesQuery> = BALANCE_INFOS
+        .range(deps.storage, next, None, cosmwasm_std::Order::Ascending)
+        .take(limit.unwrap_or(30) as usize)
+        .map(|tuple| {
+            let (k, v) = tuple?;
+            let mut assets: Vec<Asset> = vec![];
+            for asset_data in v.balances {
+                let result = query_balance(deps, k.as_str(), &asset_data.asset)?;
+                assets.push(Asset {
+                    info: asset_data.asset,
+                    amount: result
+                        .checked_div(Uint128::from(10u64.pow(asset_data.decimals as u32)))
+                        .unwrap_or_default(),
+                });
+            }
+            Ok(BalancesQuery {
+                addr: k,
+                label: v.label,
+                assets,
+            })
+        })
+        .collect::<StdResult<_>>()?;
+
+    Ok(AllCurrentBalancesQueryResponse {
+        balance_assets: balances,
+    })
 }

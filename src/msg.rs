@@ -22,6 +22,12 @@ pub enum ExecuteMsg {
     UpdateAdmin { new_admin: String },
 }
 
+/// The message to add balance mapping.
+///
+/// # Propeties
+///
+/// * `lower_bound` - The lower bound of the balance mapping not multiple decimals
+///
 #[cw_serde]
 pub struct AddNewBalanceMappingMsg {
     pub addr: String,
@@ -30,6 +36,13 @@ pub struct AddNewBalanceMappingMsg {
     pub decimals: u8,
     pub label: Option<String>,
 }
+
+/// The message to update exist balance mapping.
+///
+/// # Properties
+///
+/// * `lower_bound` - The lower bound of the balance mapping not multiple decimals
+///
 
 #[cw_serde]
 pub struct UpdateBalanceMappingMsg {
@@ -58,6 +71,11 @@ pub enum QueryMsg {
     QueryBalanceMapping { addr: String },
     #[returns(cw_controllers::AdminResponse)]
     QueryAdmin {},
+    #[returns(AllCurrentBalancesQueryResponse)]
+    QueryAllCurrentBalances {
+        limit: Option<u8>,
+        next: Option<String>,
+    },
 }
 
 #[cw_serde]
@@ -93,4 +111,9 @@ pub struct BalancesQuery {
     pub addr: Addr,
     pub label: String,
     pub assets: Vec<Asset>,
+}
+
+#[cw_serde]
+pub struct AllCurrentBalancesQueryResponse {
+    pub balance_assets: Vec<BalancesQuery>,
 }
