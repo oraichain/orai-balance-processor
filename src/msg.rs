@@ -22,6 +22,12 @@ pub enum ExecuteMsg {
     UpdateAdmin { new_admin: String },
 }
 
+/// The message to add balance mapping.
+///
+/// # Propeties
+///
+/// * `lower_bound` - The lower bound of the balance mapping not multiple decimals
+///
 #[cw_serde]
 pub struct AddNewBalanceMappingMsg {
     pub addr: String,
@@ -30,6 +36,13 @@ pub struct AddNewBalanceMappingMsg {
     pub decimals: u8,
     pub label: Option<String>,
 }
+
+/// The message to update exist balance mapping.
+///
+/// # Properties
+///
+/// * `lower_bound` - The lower bound of the balance mapping not multiple decimals
+///
 
 #[cw_serde]
 pub struct UpdateBalanceMappingMsg {
